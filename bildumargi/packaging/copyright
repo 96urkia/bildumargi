@@ -1,0 +1,24 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Bildumargi
+Upstream-Contact: bildumargi@gmail.com
+Source: https://github.com/96urkia/bildumargi
+
+Files: *
+Copyright: 2026 Asier Urkia
+License: AGPL-3.0-or-later
+ Este programa es software libre: puede redistribuirlo y/o modificarlo según
+ los términos de la GNU Affero General Public License publicada por la Free
+ Software Foundation, versión 3 o (a su elección) cualquier versión posterior.
+ El texto completo está en /usr/lib/bildumargi/app/LICENSE.
+
+Files: app/frontend/fuentes/*
+Copyright: The Public Sans Project Authors; IBM Corp.
+License: OFL-1.1
+ SIL Open Font License, versión 1.1. Los textos completos están en
+ /usr/lib/bildumargi/app/frontend/fuentes/OFL-*.txt.
+
+Files: venv/*
+Copyright: los autores de cada librería (ver sus metadatos en venv/lib/python3*/site-packages/*.dist-info)
+License: MIT and BSD-3-Clause and BSD-2-Clause and Apache-2.0
+ FastAPI, Starlette, Pydantic y openpyxl (MIT); uvicorn y lxml (BSD-3-Clause);
+ pymarc (BSD-2-Clause); requests y python-multipart (Apache-2.0).

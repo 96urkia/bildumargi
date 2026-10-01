@@ -1,0 +1,53 @@
+# Receta del paquete .deb de Bildumargi (nFPM). La usa packaging/construir_deb.sh,
+# que prepara antes build/usr/lib/bildumargi (programa + Python con sus librerías).
+name: bildumargi
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+version_schema: none        # respetar «1.1» tal cual (sin convertirlo en 1.1.0)
+release: ${RELEASE}
+section: web
+priority: optional
+maintainer: "Asier Urkia <bildumargi@gmail.com>"
+description: |
+  Análisis de colecciones de bibliotecas públicas
+  Convierte los listados de AbsysNet en un diagnóstico de la colección y en
+  propuestas de compra, con datos del catálogo de la red y de DILVE.
+vendor: Bildumargi
+homepage: https://github.com/96urkia/bildumargi
+license: AGPL-3.0-or-later
+depends:
+  - ${PYDEP}
+  - adduser
+  - util-linux
+recommends:
+  - nginx
+contents:
+  - src: ./build/usr/lib/bildumargi/
+    dst: /usr/lib/bildumargi/
+    type: tree
+  - src: ./packaging/bildumargi.sh
+    dst: /usr/bin/bildumargi
+    file_info:
+      mode: 0755
+  - src: ./packaging/bildumargi.service
+    dst: /usr/lib/systemd/system/bildumargi.service
+  - src: ./packaging/bildumargi.env
+    dst: /etc/bildumargi/bildumargi.env
+    type: config|noreplace
+    file_info:
+      mode: 0644
+  - src: ./packaging/nginx-bildumargi.conf
+    dst: /usr/share/doc/bildumargi/ejemplos/nginx-bildumargi.conf
+  - src: ./packaging/README.Debian
+    dst: /usr/share/doc/bildumargi/README.Debian
+  - src: ./packaging/copyright
+    dst: /usr/share/doc/bildumargi/copyright
+  - dst: /var/lib/bildumargi
+    type: dir
+    file_info:
+      mode: 0750
+scripts:
+  postinstall: ./packaging/postinst.sh
+  preremove: ./packaging/prerm.sh
+  postremove: ./packaging/postrm.sh

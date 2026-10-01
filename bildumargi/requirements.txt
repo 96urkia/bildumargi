@@ -1,0 +1,15 @@
+# Bildumargi · librerías necesarias
+# Instalar con:  pip install -r requirements.txt
+
+fastapi>=0.110
+uvicorn>=0.27
+python-multipart>=0.0.26   # 0.0.26 corrige la CVE-2026-40347
+openpyxl>=3.1
+
+# Solo necesario para conversor.py (MARC -> .db).
+# Si no vas a generar la base de datos de la red, puedes omitirlo.
+pymarc>=5.1
+
+# Solo necesario para las novedades de DILVE (backend/dilve.py).
+requests>=2.31
+lxml>=5.0

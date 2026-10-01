@@ -1,0 +1,258 @@
+Bildumargi
+Versión: 1.1
+Licencia: AGPLv3
+
+Primera versión estable, pensada para desplegarse en un servidor de la
+intranet de una red de bibliotecas (ver la guía de despliegue) o para usarse
+en un solo ordenador con iniciar.bat / iniciar.sh.
+
+Cambios de la versión 1.1
+-------------------------
+- La carpeta de datos se puede situar fuera del programa con la variable de
+  entorno BILDUMARGI_DATOS (y la caché con BILDUMARGI_CACHE). Sin ellas, todo
+  sigue exactamente igual que en la 1.0: datos y caché junto al programa.
+- La primera vez que se usa una carpeta de datos nueva, se copian en ella los
+  ficheros de partida (bibliotecas.xlsx, pautas.json, materias_secciones.json)
+  sin sobrescribir nunca los que ya existan.
+- conversor.py guarda por defecto la base de la red en la carpeta de datos
+  configurada.
+- El panel de administración muestra la ruta completa de las bases de DILVE
+  cuando están fuera de la carpeta del programa.
+- Paquete de instalación para Linux (.deb) para Debian 12, Debian 13 y
+  Ubuntu 24.04, construido a partir del mismo código que el zip: instala
+  Bildumargi como servicio del sistema, con un usuario propio, ajustes en
+  /etc/bildumargi, datos en /var/lib/bildumargi y una clave de
+  administración aleatoria. Las actualizaciones conservan ajustes, claves y
+  datos.
+- Orden «bildumargi» en Linux: servir, conversor, demo y version.
+- Publicación automática en GitHub: al subir una etiqueta de versión se
+  construyen el zip y los .deb, se prueban y se publican con sus huellas.
+- python-multipart 0.0.26 como mínimo, que corrige la CVE-2026-40347.
+- Sugerencias de compra: un libro con varias materias THEMA aparece en todas
+  las secciones que le corresponden (una novela gráfica romántica, en
+  novela y en cómic), no solo en la de la materia principal. La ficha lo
+  indica como «También en».
+- La ficha de cada libro muestra todas sus materias THEMA, con enlace al
+  buscador oficial de EDItEUR y, si la red deja la lista de EDItEUR en la
+  carpeta de datos (thema_es.json), con su encabezado.
+- Novedades: filtro por materia THEMA y búsqueda por código (XQ, FRD…) o,
+  con la lista cargada, por encabezado.
+- Se retira el aviso de revisión terminológica pendiente del catalán y el
+  gallego.
+- Psicología (159.9) pasa a ser una sección propia, separada de filosofía
+  (1), tanto en las signaturas como en las sugerencias de DILVE.
+- Tablas de materias revisadas con THEMA v1.6 y separadas por esquema (THEMA
+  e IBIC). Entre otras correcciones: la psicología (JM), la autoayuda (VS) y
+  las relaciones personales (VFJ, VFV) van a 159.9; empresa y contabilidad
+  (KJ, KFC) a 6; mente, cuerpo, espíritu (VX) a 159.9; naturaleza (WN) a 5; cómic en IBIC
+  (FX) a C; en infantil, cine y televisión (YNF) a 7 y sociedad (YNK) a 3.
+  Solo la poesía (YDP), no las antologías, va a poesía infantil, y los
+  calificadores 5AR, 5AX y 5AZ ya no se toman como edad.
+- En una novela, las materias de no ficción (lugar, época…) no la llevan a
+  otras secciones; sí las de ficción, como la novela gráfica.
+- Novedades: la lista de materias THEMA aparece en orden alfabético, con un
+  «?» que abre el buscador oficial. Atribución de Thema, IBIC y CDU en el
+  README.
+- Novedades: nuevo orden por afinidad, un modelo de tasa de préstamo por
+  rasgo (autor, serie, editorial, materia THEMA jerárquica, calificadores,
+  palabras clave, premios) con los nunca prestados como ceros y contracción
+  empírico-bayesiana. Reparto calibrado por secciones y topes por serie y
+  autor. Sustituye al perfil por materias de
+  la 1.0, que queda solo como referencia en la comparación.
+- «?» junto a «Afines a lo que más se presta»: explicación breve del orden
+  por afinidad, con los pesos en uso.
+- «Comparar con el histórico»: prueba retrospectiva que mide qué orden acierta
+  más con los préstamos reales de la biblioteca.
+- El cálculo de «Autores más prestados» usa lo que le sobra de su tope para
+  descargar fichas de títulos propios, que alimentan el modelo.
+- Acceso con clave: la biblioteca escribe su nombre y la clave que le da el
+  administrador (nueva columna opcional Clave de bibliotecas.xlsx) y abre su
+  última carga guardada sin subir los ficheros. El Excel se relee al cambiar.
+- Sugerencias de la red: lo que ya está en el fondo se reconoce por el
+  identificador del registro en la base (cruzando los códigos de barras),
+  aunque el nombre de la biblioteca en la base no coincida letra a letra
+  con el del directorio. Antes podían proponerse libros que ya se tenían.
+- Títulos y autores de la base de la red con entidades HTML (Garc&#237;a)
+  se muestran y se comparan bien (García).
+- Ficción es solo la signatura N: un 821 («821 GRE», un diccionario de
+  literatura) va a 8 - Literatura, también en las sugerencias de la red.
+- Configuración: tabla editable de secciones por signatura (cómo empieza la
+  signatura y a qué sección va), para la red en Administración y para cada
+  biblioteca en su Configuración. Solo afecta al análisis; el fondo se
+  reclasifica al guardar.
+- Se retiran las notas aclaratorias fijas de los gráficos (Diagnóstico,
+  Secciones, Compras y Seguimiento) y de las sugerencias de DILVE
+  (novedades y obras de autores más prestados). La aclaración del uso relativo y de las
+  secciones con pocos volúmenes queda en la ayuda desplegable «?». El
+  informe imprimible las conserva.
+
+La versión 1.0 es la depositada en el Registro de la Propiedad Intelectual y
+se conserva sin cambios.
+
+Qué incluye la versión 1.0
+--------------------------
+Análisis de la colección (a partir de los cuatro listados de AbsysNet:
+topográfico, catálogo, no prestados y más prestados):
+- Diagnóstico: volúmenes, documentos por habitante frente a las pautas,
+  índice de circulación, actualidad del fondo, peso y uso relativo por
+  sección, radiografía automática y años de edición coloreados por uso.
+- Secciones: mapa de secciones (tamaño = volumen, color = uso), años de
+  edición, todas las localizaciones, tabla comparativa y ejemplares con
+  orden sobre toda la selección; filtros por signatura, localización,
+  idioma, público, préstamo y año de edición (de / a).
+- Seguimiento: evolución entre cargas e historial de cargas por biblioteca.
+- Informe imprimible en A4, en color o para blanco y negro.
+
+Sugerencias de compra (tres fuentes con el mismo diagnóstico de cabecera;
+pulsar una sección en «¿Dónde hace más falta comprar?» o en la oferta por
+sección filtra la lista de cualquiera de las tres, y el desplegable de
+sección queda sincronizado con el círculo marcado):
+- Presencia en bibliotecas: títulos que tiene la red y la biblioteca no.
+- Autores más prestados: núcleo de préstamo por sección (criterio de
+  Bradford) y demás obras de esos autores según DILVE, con verificación de
+  autoría, filtros de idioma, sección y edad, y resultado guardado.
+- Novedades: altas de DILVE de los últimos meses, con portadas, resumen,
+  palabras clave y materias; filtros por sección, idioma, editorial,
+  formato y texto, y orden por afinidad con lo que más se presta.
+- Tabla propia materias -> signatura (CDU, THEMA, IBIC), editable, con
+  tramos infantiles calibrados con la estantería de cada biblioteca.
+- Caché de fichas de DILVE compartida por la red y preparación en segundo
+  plano: los clics responden en décimas de segundo.
+- Uso prudente de DILVE: todo lo descargado se guarda y no se vuelve a pedir
+  (fichas y novedades se consultan juntas antes de llamar); cuota diaria de
+  llamadas y pausa mínima entre ellas, configurables por la red; los lotes
+  de 128 ISBN ya no se repiten de uno en uno cuando faltan fichas; la forma
+  de enviar las listas se averigua una vez y se recuerda; «Autores más
+  prestados» pide como mucho 640 fichas nuevas por cálculo, empezando por
+  las obras de los títulos más prestados, y completa el resto en cálculos
+  posteriores. Si DILVE deniega el acceso (códigos 11xx, como el 1120), se
+  deja de llamar y el panel de administración lo avisa, con un botón para
+  desbloquear cuando DILVE lo restablezca.
+- 6 segundos entre llamadas a DILVE como mínimo, siguiendo su recomendación.
+- Contraseña de DILVE incorrecta: se para en la primera respuesta de
+  rechazo, se avisa en la administración y no se vuelve a llamar hasta que
+  se cambie la contraseña (se guarda solo una huella, no la contraseña).
+- Autores más prestados y Novedades: casilla «Solo publicados a día de hoy»,
+  activada por defecto, que compara la fecha de publicación de DILVE con el
+  día de hoy y oculta los libros que aún no han salido.
+- Novedades: casilla «Disponibles en los próximos 3 meses» (desde mañana hasta
+  hoy + 3 meses naturales, ni un día más). Con las dos casillas, lo publicado
+  más lo inminente; las preventas lejanas (2030…) quedan fuera.
+- Novedades por páginas de 48 libros, con paginador arriba y abajo; al
+  cambiar un filtro se vuelve a la primera página.
+- En Autores más prestados y Novedades, el gráfico de barras muestra la
+  demanda y la actualidad de cada sección (los datos de «¿Dónde hace más
+  falta comprar?»), con las prioritarias primero y en ámbar; en Presencia
+  en bibliotecas sigue mostrando la oferta de la red.
+
+Red y configuración:
+- Pestaña Red: valoraciones y comentarios entre bibliotecas, con hilos.
+- Configuración en dos niveles: la red (administración con clave) y cada
+  biblioteca (tema, paleta, pestañas, idioma).
+- Cinco idiomas: castellano, euskera, catalán, gallego e inglés.
+- Todos los gráficos ampliables; temas oscuro y claro; paletas aptas para
+  daltonismo; tipografías locales, sin dependencias externas.
+
+Herramientas:
+- conversor.py: genera la base de la red a partir del MARC21 del catálogo
+  colectivo.
+- crear_demo.py: convierte una grabación de la aplicación en una demo que
+  se abre con doble clic en el navegador, sin instalar nada (sin portadas
+  por defecto; --con-portadas para incluirlas).
+
+Historial de desarrollo
+-----------------------
+Antes de la 1.0, las versiones se numeraban por fecha. Resumen:
+
+2026.10.15  crear_demo.py sin portadas por defecto y sin conexión a internet.
+2026.10.14  Sugerencias de compra unas 17 veces más rápida (caché por sesión,
+            clasificación memorizada, precarga en segundo plano).
+2026.10.13  Modo de grabación y demo sin instalación (crear_demo.py).
+2026.10.12  Rejilla de fichas en autores; ficha lateral ampliable y
+            redimensionable; fecha de publicación legible.
+2026.10.11  Filtro de año de edición; gráficos ampliables; cabecera híbrida
+            en Sugerencias de compra.
+2026.10.10  Búsqueda en novedades por resumen y palabras clave.
+2026.10.09  Todas las localizaciones con desplazamiento; orden de ejemplares
+            sobre toda la selección; edad «Adultos» en autores.
+2026.10.06  Resultado de autores guardado; secciones ordenadas y agrupadas.
+2026.10.05  Filtros de idioma, sección y edad en autores; formatos legibles.
+2026.10.03  Descarga de novedades limitada a la ventana de la red.
+2026.10.02  Tres fuentes en Sugerencias de compra; menú lateral; tabla de
+            materias; caché de fichas compartida.
+
+Versión 2026.10.01
+------------------
+- DILVE: detección del formato de lista de ISBN (antes solo llegaba una ficha
+  por lote) y descarga inicial reanudable.
+
+Versión 2026.09.30
+------------------
+- Árabe y gallego (y más idiomas opcionales) en la descarga de DILVE.
+
+Versión 2026.09.29
+------------------
+- Primer paso del módulo de novedades con DILVE: cliente de la API, espejo
+  en datos/dilve/novedades.db, descarga del último año y actualización
+  semanal; apartado en Administración de la red.
+
+Versión 2026.09.28
+------------------
+- Inglés como quinto idioma; números según el idioma.
+
+Versión 2026.09.27
+------------------
+- Versión fuera de la vista; configuración en dos niveles (red y
+  biblioteca); carpeta por biblioteca; pestaña «Seguimiento».
+
+Versión 2026.09.26
+------------------
+- Asistente de carga paso a paso con «Omitir»; aviso si falta el listado
+  de no prestados.
+
+Versión 2026.09.25
+------------------
+- Catalán y gallego; idioma en Configuración; nombres de sección traducidos.
+
+Versión 2026.09.24
+------------------
+- Informe imprimible en A4 (portada, secciones, prioridades de compra,
+  notas de método), en color o para blanco y negro.
+
+Versión 2026.09.23
+------------------
+- Botón de configuración: tema oscuro/claro, paleta de gráficos, pestañas
+  visibles y de inicio, guardado por biblioteca.
+
+Versión 2026.09.22
+------------------
+- Pestaña «Red»: actividad, mejor valorados, más comentados; respuestas en
+  hilo; valoración del fondo propio.
+
+Versión 2026.09.21
+------------------
+- Tres pestañas (fuera Idiomas y Colección), Sugerencias de compra con
+  matriz dónde/qué comprar, ayuda del uso relativo, correcciones en euskera.
+
+Versión 2026.09.20
+------------------
+- Secciones rehecha (tamaño = volumen, color = uso), circulación sin
+  umbrales («1 de cada 3»), estados de préstamo sin juicio de valor.
+
+Versión 2026.09.19
+------------------
+- Pestaña Diagnóstico, pautas configurables (datos/pautas.json), tema negro,
+  paleta Okabe-Ito, tipografías locales, lenguaje descriptivo.
+
+Versión 2026.09.18
+------------------
+- CDU fuera del análisis (salvo infantil en compras), búsqueda por signatura
+  con comas y memoria, Secciones en una sola pantalla.
+
+Cómo comprobar que estás ejecutando ESTA versión
+------------------------------------------------
+Al arrancar, la ventana de la terminal muestra "Bildumargi 1.1".
+En la aplicación, el menú lateral muestra:
+   Diagnóstico · Secciones · Seguimiento                                   (sin base de datos enlazada)
+   Diagnóstico · Secciones · Sugerencias de compra · Red · Seguimiento     (con base)
+El pie de página debe decir "AGPLv3 · Código fuente".

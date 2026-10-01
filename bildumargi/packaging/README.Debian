@@ -1,0 +1,40 @@
+Bildumargi instalado con el paquete .deb
+========================================
+
+Qué hay y dónde
+  /usr/lib/bildumargi/app        el programa (no se modifica)
+  /usr/lib/bildumargi/venv       Python y las librerías que necesita
+  /usr/bin/bildumargi            orden para usarlo (ver abajo)
+  /etc/bildumargi/bildumargi.env ajustes: dirección, puerto, carpeta de datos
+  /etc/bildumargi/secretos.env   clave de administración y cuenta de DILVE (600)
+  /var/lib/bildumargi            datos: bases, historial de cada biblioteca, DILVE
+
+El servicio
+  Se instala activado y arrancado, escuchando en 127.0.0.1:8765.
+    sudo systemctl status bildumargi
+    sudo systemctl restart bildumargi       (tras cambiar ajustes o claves)
+    journalctl -u bildumargi -f             (mensajes del programa)
+
+Primeros pasos
+  1. Clave de administración: está en /etc/bildumargi/secretos.env.
+     Para verla: sudo cat /etc/bildumargi/secretos.env
+  2. Cuenta de DILVE (opcional): rellenar BILDUMARGI_DILVE_USUARIO y
+     BILDUMARGI_DILVE_CLAVE en ese mismo fichero y reiniciar el servicio.
+  3. Directorio de bibliotecas: sustituir /var/lib/bildumargi/bibliotecas.xlsx
+     por el de la red.
+  4. Publicarlo en la intranet: ver el ejemplo de nginx en
+     /usr/share/doc/bildumargi/ejemplos/nginx-bildumargi.conf
+
+Base de datos de la red
+  sudo bildumargi conversor /ruta/exportacion.mrc
+  (se guarda en /var/lib/bildumargi/base_red.db; el fichero de entrada debe
+  poder leerlo el usuario bildumargi, por ejemplo copiándolo a /tmp)
+
+Actualizar
+  sudo apt install ./bildumargi_<nueva versión>.deb
+  Los ajustes, las claves y los datos se conservan.
+
+Desinstalar
+  sudo apt remove bildumargi     conserva ajustes y datos
+  sudo apt purge bildumargi      lo borra TODO, datos incluidos: hacer antes
+                                 una copia de /var/lib/bildumargi

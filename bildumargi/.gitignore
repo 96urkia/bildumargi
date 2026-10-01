@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Secretos y configuración local
+*.env
+# …salvo la plantilla del paquete .deb, que no lleva secretos y hace falta
+!packaging/bildumargi.env
+config_local.py
+datos/dilve/credenciales.json
+
+# Datos generados al usar Bildumargi (nunca al repositorio)
+datos/configuracion_red.json
+datos/bibliotecas/
+datos/valoraciones.db
+datos/dilve/
+datos/cache/
+datos/preferencias.json
+# Lista de encabezados THEMA de EDItEUR: cada red la descarga (licencia propia)
+datos/thema*.json
+datos/thema*.xml
+datos/thema*.csv
+*.db
+*.db-wal
+*.db-shm
+
+# Demos y grabaciones
+bildumargi-grabacion*.json
+Bildumargi-demo*/
+Bildumargi-demo*.zip
+portadas-cache/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Paquetes generados
+build/
+dist/

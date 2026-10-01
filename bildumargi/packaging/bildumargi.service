@@ -1,0 +1,36 @@
+[Unit]
+Description=Bildumargi, análisis de colecciones de bibliotecas
+Documentation=file:///usr/share/doc/bildumargi/README.Debian
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=bildumargi
+Group=bildumargi
+EnvironmentFile=/etc/bildumargi/bildumargi.env
+EnvironmentFile=-/etc/bildumargi/secretos.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/bildumargi servir
+Restart=on-failure
+RestartSec=5
+# Carpeta de datos, creada y con los permisos correctos
+StateDirectory=bildumargi
+StateDirectoryMode=0750
+UMask=0027
+# Protección: el programa solo puede escribir en su carpeta de datos
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/bildumargi
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

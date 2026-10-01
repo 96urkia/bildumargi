@@ -1,0 +1,8 @@
+{
+  "_ayuda": "Referencia de fondo por habitante que usa el Diagnóstico. Cada red puede cambiarla por la suya (estándar autonómico, plan de la red...). Los tramos se leen en orden: se aplica el primero cuyo 'hasta_habitantes' sea mayor o igual que la población del municipio; null significa 'sin límite'. 'fondo_minimo' es opcional.",
+  "fuente": "Pautas sobre los servicios de las bibliotecas públicas (2002), que recogen las Directrices IFLA/UNESCO para el desarrollo del servicio de bibliotecas públicas (2001)",
+  "fuente_corta": "Pautas BP 2002 / IFLA",
+  "tramos": [
+    {"hasta_habitantes": null, "docs_hab_min": 1.5, "docs_hab_max": 2.5, "fondo_minimo": 2500}
+  ]
+}
