@@ -31,8 +31,8 @@
 ??? question "El puerto 8000 está ocupado"
     Cambia `PUERTO` en `config.py`.
 
-??? question "Falla o no aparece el filtro de idiomas."
-    La red no ha conectado el catálogo colectivo. Ver
+??? question "El sistema clasifica como 'Otros' los idiomas de (algunos de) los ejemplares."
+    La red no ha conectado o actualizado el catálogo colectivo. Ver
     [Catálogo colectivo de la red](../administracion/catalogo-red.md).
 
 
