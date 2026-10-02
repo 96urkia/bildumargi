@@ -31,5 +31,8 @@
 ??? question "El puerto 8000 está ocupado"
     Cambia `PUERTO` en `config.py`.
 
-!!! note "Pendiente de completar"
-    Añade los problemas que vayan apareciendo en las bibliotecas piloto.
+??? question "Falla o no aparece el filtro de idiomas."
+    La red no ha conectado el catálogo colectivo. Ver
+    [Catálogo colectivo de la red](../administracion/catalogo-red.md).
+
+
