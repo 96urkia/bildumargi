@@ -15,6 +15,11 @@ Solo hace falta **Python 3.10 o superior**; el zip trae todo lo demás.
     ```
     python --version
     ```
+    O
+     ```
+    python3 --version
+    ```
+    
 
     Si no responde con un número de versión, descárgalo de
     [python.org](https://www.python.org/downloads/) e instálalo marcando la
