@@ -17,6 +17,8 @@ caso necesita estar publicado en internet.
 **Descargas:** zip para Windows y cualquier sistema y paquetes .deb para Debian
 y Ubuntu, en [la página de versiones](https://github.com/96urkia/bildumargi/releases).
 
+**Manual completo**: https://96urkia.github.io/bildumargi/
+
 ---
 
 ## Puesta en marcha en cinco minutos
