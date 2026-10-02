@@ -12,28 +12,10 @@ Bildumargi trabaja con cuatro listados de AbsysNet. Expórtalos siempre en
 
 ## Pasos en AbsysNet
 
-!!! note "Pendiente de completar"
-    Añade aquí, para cada listado, la ruta de menús de AbsysNet, los
-    parámetros recomendados (periodo de los no prestados y más prestados,
-    sucursal). El asistente de Bildumargi enlaza un vídeo por listado que
-    puede servir de guion.
+!!! note "En la aplicaicón"
+    La incorporación incorpora vídeos que explican como localizar y descargar cada archivo.
 
-### Topográfico de ejemplares
 
-1. …
-2. …
-
-### Catálogo
-
-Si el fondo es grande y AbsysNet no deja exportarlo de una vez, exporta varias
-partes: en el paso del catálogo puedes subir **varios ficheros a la vez** y
-Bildumargi los une solo, en cualquier orden.
-
-### No prestados y más prestados
-
-Usa el **mismo periodo** en los dos listados (por ejemplo, los últimos tres
-años) y el mismo cada vez que repitas el análisis. Así los resultados de
-distintas cargas son comparables en [Seguimiento](seguimiento.md).
 
 ## Consejos
 
@@ -41,3 +23,5 @@ distintas cargas son comparables en [Seguimiento](seguimiento.md).
   catálogo son de fechas distintas, puede que no coincidan.
 - No hace falta cambiar el nombre de los ficheros: Bildumargi los reconoce por
   el contenido.
+- Si la biblioteca cuenta con más de 20.000 ejemplares, dividir la descarga del archivo **Catálogo**. Se recomiendan **10.000** ejemplares por descarga. En los vídeos se explica como dividir las descargas.
+- Para identificar los libros prestados en los últimos años (por ejemplo, en los 5 últimos años), acotar las búsquedas de **No prestados** y **Más prestados** a esas fechas, mediante **Fecha de devolución**
