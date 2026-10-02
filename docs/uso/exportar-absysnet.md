@@ -12,8 +12,8 @@ Bildumargi trabaja con cuatro listados de AbsysNet. Expórtalos siempre en
 
 ## Pasos en AbsysNet
 
-!!! note "En la aplicaicón"
-    La incorporación incorpora vídeos que explican como localizar y descargar cada archivo.
+    En la interfaz de la aplicación.
+    Bildumargi incorpora vídeos que explican como localizar y descargar cada archivo.
 
 
 
