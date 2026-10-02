@@ -39,3 +39,5 @@ Thumbs.db
 # Paquetes generados
 build/
 dist/
+
+site/

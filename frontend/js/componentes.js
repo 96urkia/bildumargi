@@ -1679,7 +1679,9 @@ function graficoEvolucion(puntos, { ancho, alto, color, formato, titulo }) {
   min -= margen; max += margen;
   const X = (i) => m.izquierda + (puntos.length === 1 ? w / 2 : (i / (puntos.length - 1)) * w);
   const Y = (v) => m.arriba + h - ((v - min) / (max - min)) * h;
-  [min + margen, max - margen].forEach((v) => {
+  // Si el valor no cambia entre cargas, un solo rótulo (dos superpuestos se leían «20004»)
+  const rotulos = min + margen === max - margen ? [min + margen] : [min + margen, max - margen];
+  rotulos.forEach((v) => {
     svg.appendChild(svgEl("line", { x1: m.izquierda, x2: m.izquierda + w, y1: Y(v), y2: Y(v), class: "rejilla-linea" }));
     svg.appendChild(svgEl("text", { x: m.izquierda - 6, y: Y(v) + 3.5, "text-anchor": "end", class: "valor-mono" }, formato(v)));
   });

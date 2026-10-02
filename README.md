@@ -63,12 +63,22 @@ configurar nada más. Los dos apartados siguientes son para sacarle el resto.
 Para Debian 12, Debian 13 y Ubuntu 24.04 hay un paquete que instala Bildumargi
 como un servicio más del sistema. En la página de cada versión en GitHub
 están el zip de siempre y un `.deb` por distribución, con sus huellas en
-`SHA256SUMS`.
+`SHA256SUMS`. Cada distribución tiene su paquete (`deb12`, `deb13` o
+`ubuntu24.04` en el nombre): el de otra no se instala, porque cada una trae
+una versión distinta de Python. `cat /etc/os-release` dice cuál es la tuya.
 
 ```
+cd /tmp
 sudo apt update
-sudo apt install ./bildumargi_1.1-1~ubuntu24.04_amd64.deb
+sudo apt install ./bildumargi*deb13*.deb
 ```
+
+GitHub publica el nombre con un punto en lugar de la `~`
+(`bildumargi_1.1-1.deb13_amd64.deb`); de ahí los comodines. Descargar en
+`/tmp` evita un aviso inofensivo de apt («Permiso denegado») que sale al
+instalar desde la carpeta personal. El
+[manual](https://96urkia.github.io/bildumargi/administracion/instalar-servidor/)
+explica la instalación paso a paso.
 
 El paquete crea un usuario propio para el servicio, lo deja arrancado en
 `127.0.0.1:8765` y genera una clave de administración aleatoria. Después:

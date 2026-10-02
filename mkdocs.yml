@@ -1,0 +1,93 @@
+site_name: Manual de Bildumargi
+site_description: Manual de instalación y uso de Bildumargi, análisis de la colección de bibliotecas públicas a partir de AbsysNet
+site_author: Asier Urkia
+site_url: https://96urkia.github.io/bildumargi/
+repo_url: https://github.com/96urkia/bildumargi
+repo_name: 96urkia/bildumargi
+edit_uri: edit/main/docs/
+copyright: Texto bajo licencia CC BY-SA 4.0 · Bildumargi se distribuye bajo AGPLv3
+
+theme:
+  name: material
+  language: es
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Cambiar a tema oscuro
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Cambiar a tema claro
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+
+plugins:
+  - search:
+      lang: es
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.keys
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Inicio: index.md
+  - Empezar:
+      - Tu primer diagnóstico: empezar/primer-diagnostico.md
+  - Uso diario:
+      - uso/index.md
+      - Exportar los listados de AbsysNet: uso/exportar-absysnet.md
+      - Cargar los listados: uso/cargar-listados.md
+      - Entrar con clave: uso/entrar-con-clave.md
+      - Diagnóstico: uso/diagnostico.md
+      - Secciones: uso/secciones.md
+      - Informe imprimible: uso/informe.md
+      - Sugerencias de compra: uso/sugerencias-compra.md
+      - Novedades de DILVE: uso/novedades.md
+      - Seguimiento: uso/seguimiento.md
+      - Red y valoraciones: uso/red.md
+      - Configuración de la biblioteca: uso/configuracion.md
+  - Instalación y administración:
+      - administracion/index.md
+      - Requisitos y modos de uso: administracion/requisitos.md
+      - Instalar en un ordenador: administracion/instalar-ordenador.md
+      - Instalar en un servidor Linux: administracion/instalar-servidor.md
+      - Directorio de bibliotecas: administracion/directorio.md
+      - Catálogo colectivo de la red: administracion/catalogo-red.md
+      - Administración de la red: administracion/panel-red.md
+      - DILVE: administracion/dilve.md
+      - Ajustes avanzados: administracion/ajustes-avanzados.md
+      - Copias y actualizaciones: administracion/copias-actualizaciones.md
+  - Referencia:
+      - Indicadores: referencia/indicadores.md
+      - Ficheros y carpetas: referencia/ficheros.md
+      - Problemas frecuentes: referencia/problemas.md
+  - Cómo funciona:
+      - El uso relativo: explicacion/uso-relativo.md
+      - El modelo de préstamo: explicacion/modelo-prestamo.md
+      - Datos y privacidad: explicacion/privacidad.md
+  - Acerca de: acerca.md
