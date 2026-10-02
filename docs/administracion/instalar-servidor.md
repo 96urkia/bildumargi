@@ -240,9 +240,6 @@ sudo nginx -t && sudo systemctl reload nginx
     }
     ```
 
-!!! note "Pendiente de completar"
-    Añade aquí el procedimiento de tu red: nombre del servidor, certificado y
-    restricciones de acceso.
 
 ## Reiniciar y consultar el servicio
 
