@@ -53,6 +53,6 @@ en otro fichero (`valoraciones.db`).
 !! warning "Idiomas"
 Además de para generar recomendaciones, la base de datos permite extraer el **idioma**
 de los ejemplares, a través del campo 008 de MARC21. Sin vincularla, el **filtro de idioma**
-no funciona adecuadamente en el análisis de la colección.
+no funciona adecuadamente en el análisis de la colección. 
 
 
