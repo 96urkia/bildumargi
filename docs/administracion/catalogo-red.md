@@ -50,4 +50,6 @@ Regenera la base cuando quieras reflejar el fondo actual de la red (por
 ejemplo, cada mes). Las valoraciones de las bibliotecas no se pierden: están
 en otro fichero (`valoraciones.db`).
 
-
+!!! note "Pendiente de completar"
+    Describe aquí cómo obtiene tu red la exportación MARC del catálogo
+    colectivo y con qué periodicidad.

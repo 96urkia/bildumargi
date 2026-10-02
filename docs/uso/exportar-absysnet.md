@@ -15,16 +15,13 @@ Bildumargi trabaja con cuatro listados de AbsysNet. Expórtalos siempre en
 !!! note "Pendiente de completar"
     Añade aquí, para cada listado, la ruta de menús de AbsysNet, los
     parámetros recomendados (periodo de los no prestados y más prestados,
-    sucursal) y una captura. El asistente de Bildumargi enlaza un vídeo por
-    listado que puede servir de guion.
+    sucursal). El asistente de Bildumargi enlaza un vídeo por listado que
+    puede servir de guion.
 
 ### Topográfico de ejemplares
 
 1. …
 2. …
-
-!!! example "Captura pendiente"
-    `img/absysnet-topografico.png`
 
 ### Catálogo
 

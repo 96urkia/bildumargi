@@ -4,8 +4,9 @@ La administración decide lo que vale para **todas las bibliotecas**. Se entra
 desde el pie de la configuración (la rueda dentada), con la clave de
 administración.
 
-!!! example "Captura pendiente"
-    `img/administracion-red.png`
+![Administración de la red, parte superior: pestañas, idiomas, valores de partida, historial de cargas y tabla de secciones por signatura](../img/administracion-red-1.png){ width="640" }
+
+![Administración de la red, parte inferior: novedades de DILVE y estado de la descarga (usuario y fecha difuminados en el manual)](../img/administracion-red-2.png){ width="640" }
 
 ## La clave de administración
 

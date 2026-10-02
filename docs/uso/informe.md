@@ -4,8 +4,7 @@ El botón **Informe**, junto a **Cambiar ficheros**, abre una vista previa en
 hojas A4 que se imprime o se guarda como PDF desde el navegador, sin conexión
 a internet.
 
-!!! example "Captura pendiente"
-    `img/informe-vista-previa.png`
+![Primera página del informe imprimible: indicadores, radiografía y peso y uso relativo por sección](../img/informe-vista-previa.png){ width="600" }
 
 ## Qué contiene
 
