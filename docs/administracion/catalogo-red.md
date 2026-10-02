@@ -47,9 +47,10 @@ Con Dropbox, el enlace debe terminar en `?dl=1`.
 ## 3. Actualiza la base periódicamente
 
 Regenera la base cuando quieras reflejar el fondo actual de la red (por
-ejemplo, cada mes). Las valoraciones de las bibliotecas no se pierden: están
-en otro fichero (`valoraciones.db`).
+ejemplo, cada meso anualmente). Las valoraciones de las bibliotecas no se pierden: están
+en otro fichero (`valoraciones.db`). 
+Además de para generar recomendaciones, la base de datos permite extraer el **idioma**
+de los ejemplares, a través del campo 008 de MARC21. Sin vincularla, el **filtro de idioma**
+no funciona en el análisis de la colección no funciona adecuadamente.
 
-!!! note "Pendiente de completar"
-    Describe aquí cómo obtiene tu red la exportación MARC del catálogo
-    colectivo y con qué periodicidad.
+
