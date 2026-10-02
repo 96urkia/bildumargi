@@ -47,7 +47,7 @@ Con Dropbox, el enlace debe terminar en `?dl=1`.
 ## 3. Actualiza la base periódicamente
 
 Regenera la base cuando quieras reflejar el fondo actual de la red (por
-ejemplo, cada meso anualmente). Las valoraciones de las bibliotecas no se pierden: están
+ejemplo, cada mes o anualmente). Las valoraciones de las bibliotecas no se pierden: están
 en otro fichero (`valoraciones.db`). 
 
 !!! warning "Idiomas"
