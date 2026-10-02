@@ -11,9 +11,8 @@ Bildumargi trabaja con cuatro listados de AbsysNet. Expórtalos siempre en
 | **Más prestados** | Opcional | Qué títulos tienen alta demanda. | No se distingue la alta demanda del préstamo normal. |
 
 ## Pasos en AbsysNet
-
-    En la interfaz de la aplicación.
-    Bildumargi incorpora vídeos que explican como localizar y descargar cada archivo.
+En la interfaz de la aplicación.
+Bildumargi incorpora vídeos que explican como localizar y descargar cada archivo.
 
 
 
