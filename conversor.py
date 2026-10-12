@@ -3,8 +3,14 @@
 Bildumargi · Conversor de MARC a base de datos
 ==============================================
 
-Convierte la exportación MARC del catálogo colectivo en el fichero .db que
-Bildumargi necesita para las recomendaciones de compra.
+Convierte una exportación MARC (la del propio catálogo de AbsysNet o la del
+catálogo colectivo de la red) en un fichero .db. Bildumargi toma de él el
+idioma de cada ejemplar (Configuración → Catálogo MARC), que combina con el
+de DILVE: DILVE describe bien las novedades y el MARC, lo antiguo.
+
+Para eso basta con una base ligera:
+
+    python conversor.py mi_catalogo.mrc --sin-marc --sin-fts
 
     python conversor.py todopublicas.mrc
     python conversor.py catalogo.mods -o datos/base_red.db
@@ -14,7 +20,8 @@ Formatos de entrada admitidos:
     .mrc / .mrk / .marc      MARC21 binario (lo habitual en AbsysNet/Baratz)
     .xml / .mods / .marcxml  MARCXML
 
-Después, escribe la ruta del .db resultante en la línea 34 de config.py.
+Después, en Bildumargi: Configuración → Catálogo MARC, escribe la ruta del
+.db resultante y pulsa «Extraer los idiomas».
 
 Tablas que genera
 -----------------
@@ -446,7 +453,7 @@ def main():
               crear_fts=not args.sin_fts,
               fts_libros=not args.sin_fts_libros,
               codificacion=args.codificacion)
-    print(f"\nEscribe esta ruta en la línea 34 de config.py:\n    URL_BASE_DATOS = \"{args.salida}\"\n")
+    print(f"\nEn Bildumargi: Configuración → Catálogo MARC, escribe esta ruta y pulsa «Extraer los idiomas»:\n    {args.salida}\n")
 
 
 if __name__ == "__main__":

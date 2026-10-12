@@ -68,9 +68,9 @@ def main():
     print(f"  Abriendo {url}")
     if config.HOST == "0.0.0.0":
         print("  Accesible también desde otros equipos de la red local.")
-    if not config.url_base_datos():
-        print("  Sin base de datos enlazada: las recomendaciones de compra")
-        print("  quedan ocultas. Ver el apartado 1 del README.")
+    if not (getattr(config, "DILVE_USUARIO", "") and getattr(config, "DILVE_CLAVE", "")):
+        print("  Sin cuenta de DILVE: las sugerencias de compra quedan")
+        print("  ocultas. Ver «Novedades del libro español» en el README.")
     print("  Para parar la aplicación: Ctrl+C")
     print("=" * 62)
 
@@ -80,7 +80,7 @@ def main():
         print(f"  El puerto {config.PUERTO} ya está ocupado, casi siempre porque hay")
         print("  otra ventana de Bildumargi abierta. Ciérrala y vuelve a intentarlo.")
         print()
-        print("  Si no la encuentras, cambia PUERTO en config.py (por ejemplo, 8001).")
+        print("  Si no la encuentras, pon otro PUERTO en config_local.py (por ejemplo, 8001).")
         print()
         print("  No se abre el navegador a propósito: lo que verías sería la versión")
         print("  que ya estaba en marcha, no esta.")

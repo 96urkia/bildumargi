@@ -1,12 +1,13 @@
 # Publicar una versión de Bildumargi.
 #
 # Se pone en marcha al subir una etiqueta que empiece por «v», por ejemplo:
-#   git tag -a v1.1 -m "Bildumargi 1.1"
-#   git push origin v1.1
+#   git tag -a v2.0 -m "Bildumargi 2.0"
+#   git push origin v2.0
 #
-# Construye el zip de siempre y un paquete .deb por distribución, prueba a
-# instalar cada .deb en un sistema limpio y lo adjunta todo a la página de la
-# versión en GitHub, junto con las huellas SHA-256.
+# Construye el zip de siempre, un paquete .deb por distribución y el
+# instalador de Windows, prueba a instalar cada .deb en un sistema limpio y lo
+# adjunta todo a la página de la versión en GitHub, junto con las huellas
+# SHA-256.
 name: Publicar versión
 
 on:
@@ -69,9 +70,33 @@ jobs:
           name: deb-${{ matrix.distro }}
           path: dist/*.deb
 
+  windows:
+    name: Instalador de Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Librerías
+        run: python -m pip install -r requirements.txt -r packaging/windows/requisitos.txt
+      - name: Construir el instalador
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}".TrimStart("v")
+          $actual = (Select-String -Path config.py -Pattern '^VERSION = "(.+)"').Matches[0].Groups[1].Value
+          if ($v -ne $actual) { throw "La etiqueta ($v) no coincide con VERSION de config.py ($actual)" }
+          ./packaging/windows/construir.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: build/windows/Bildumargi-*-instalador.exe
+
   publicar:
     name: Publicar en GitHub
-    needs: [zip, deb]
+    needs: [zip, deb, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

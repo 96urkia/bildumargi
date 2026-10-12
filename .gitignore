@@ -13,6 +13,8 @@ datos/dilve/credenciales.json
 
 # Datos generados al usar Bildumargi (nunca al repositorio)
 datos/configuracion_red.json
+datos/configuracion.json
+datos/marc_idiomas.db
 datos/bibliotecas/
 datos/valoraciones.db
 datos/dilve/
@@ -39,5 +41,3 @@ Thumbs.db
 # Paquetes generados
 build/
 dist/
-
-site/

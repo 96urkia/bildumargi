@@ -1,6 +1,35 @@
 # Ajustes avanzados
 
-Ficheros opcionales en la carpeta de datos para adaptar Bildumargi a la red.
+Casi todo se cambia en [Configuración](../uso/configuracion.md). Esta página
+recoge lo que va en ficheros, para instalaciones con Python o en servidor.
+
+## `config_local.py`
+
+Con el zip, las claves y rutas propias de ese ordenador pueden ir en un
+fichero `config_local.py`, junto a `config.py`. Lo que se escriba ahí manda
+sobre `config.py`, y **no se sube al repositorio ni entra en el zip**:
+
+```python
+DILVE_USUARIO = "..."
+DILVE_CLAVE = "..."
+CLAVE_ADMIN = "una-clave-larga-que-no-uses-para-nada-más"
+PUERTO = 8000
+```
+
+En un servidor, lo mismo va en variables de entorno (ver
+[Ficheros y carpetas](../referencia/ficheros.md#variables-de-entorno)).
+
+## Clave de configuración
+
+Por defecto, cualquiera que use Bildumargi puede cambiar la configuración,
+que es lo normal en un solo ordenador. En una instalación compartida (un
+servidor al que entran varios ordenadores), conviene poner una clave:
+`CLAVE_ADMIN` en `config_local.py` o `BILDUMARGI_CLAVE_ADMIN`. El paquete
+`.deb` la genera sola en `/etc/bildumargi/secretos.env`.
+
+Con clave, la Configuración la pide antes de abrirse. El acceso dura dos
+horas. No hay recuperación por correo: si se olvida, se pone otra y se
+reinicia Bildumargi.
 
 ## Referencia de fondo por habitante: `pautas.json`
 
@@ -8,7 +37,8 @@ El Diagnóstico compara los documentos por habitante con una referencia. Por
 defecto, las **Pautas sobre los servicios de las bibliotecas públicas
 (2002)**: de 1,5 a 2,5 documentos por habitante y un fondo mínimo de 2.500.
 
-Una red puede poner la suya, por tramos de población:
+Se puede poner otra, por tramos de población, en `pautas.json` (carpeta de
+datos):
 
 ```json
 {
@@ -27,8 +57,8 @@ población; `null` significa «sin límite».
 
 ## Materias y secciones: `materias_secciones.json`
 
-Ajusta cómo se asignan secciones a las novedades a partir de sus materias
-Thema:
+Ajusta cómo se asignan secciones a los libros de DILVE a partir de sus
+materias Thema:
 
 ```json
 {"secciones": {"MKM": "6", "WH": "N"}}
@@ -47,7 +77,7 @@ después con **Comparar con el histórico**:
 
 Para ver el nombre de cada materia junto a su código («Novela gráfica · XAM»),
 descarga de editeur.org la lista oficial en castellano (JSON o XML), guárdala
-como `thema_es.json` y reinicia Bildumargi.
+como `thema_es.json` en la carpeta de datos y reinicia Bildumargi.
 
 !!! info "Licencia de la lista Thema"
     Si se redistribuye, debe ser el fichero oficial sin modificar.

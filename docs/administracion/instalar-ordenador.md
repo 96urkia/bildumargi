@@ -1,9 +1,9 @@
-# Instalar en un ordenador
+# Instalar con Python
 
-Con el zip, Bildumargi funciona en un ordenador con Windows, Linux o macOS,
-sin instalarlo como servicio. Es la opción para una biblioteca que lo usa
-sola o para probarlo. Para dar servicio a toda la red, ver
-[Instalar en un servidor Linux](instalar-servidor.md).
+Con el zip, Bildumargi funciona en un ordenador con Linux, macOS o Windows,
+sin instalarlo como programa: se abre en el navegador. En Windows lo
+habitual es el [instalador](instalar-windows.md); esta guía es para los demás
+sistemas o para quien prefiera Python.
 
 Solo hace falta **Python 3.10 o superior**; el zip trae todo lo demás.
 
@@ -15,13 +15,12 @@ Solo hace falta **Python 3.10 o superior**; el zip trae todo lo demás.
     ```
     python --version
     ```
-  
-    
+
     Si no responde con un número de versión, descárgalo de
     [python.org](https://www.python.org/downloads/) e instálalo marcando la
     casilla **«Add Python to PATH»**.
 
-    **2. Descarga y descomprime Bildumargi.** Descarga `bildumargi-1.1.zip`
+    **2. Descarga y descomprime Bildumargi.** Descarga `bildumargi-2.0.zip`
     de la [página de versiones](https://github.com/96urkia/bildumargi/releases)
     y descomprímelo (clic derecho → «Extraer todo») en una carpeta, por
     ejemplo `C:\Bildumargi`.
@@ -30,7 +29,7 @@ Solo hace falta **Python 3.10 o superior**; el zip trae todo lo demás.
     sistema, entra en la carpeta y ejecuta:
 
     ```
-    cd C:\Bildumargi\bildumargi-1.1
+    cd C:\Bildumargi\bildumargi-2.0
     pip install -r requirements.txt
     ```
 
@@ -60,9 +59,9 @@ Solo hace falta **Python 3.10 o superior**; el zip trae todo lo demás.
 
     ```
     cd ~
-    wget https://github.com/96urkia/bildumargi/releases/latest/download/bildumargi-1.1.zip
-    unzip bildumargi-1.1.zip
-    cd bildumargi-1.1
+    wget https://github.com/96urkia/bildumargi/releases/latest/download/bildumargi-2.0.zip
+    unzip bildumargi-2.0.zip
+    cd bildumargi-2.0
     ```
 
     **3. Crea el entorno virtual e instala las librerías (solo la primera
@@ -89,14 +88,11 @@ Solo hace falta **Python 3.10 o superior**; el zip trae todo lo demás.
 
     ![Bildumargi arrancado en Linux con la dirección http://127.0.0.1:8000](../img/ord-linux-iniciar.png)
 
-    El aviso «Sin base de datos enlazada» es normal mientras no se conecte el
-    [catálogo colectivo de la red](catalogo-red.md).
-
     Para pararlo, pulsa ++ctrl+c++ en la terminal. **Las siguientes veces**
     basta con:
 
     ```
-    cd ~/bildumargi-1.1
+    cd ~/bildumargi-2.0
     . venv/bin/activate
     bash iniciar.sh
     ```
@@ -108,16 +104,18 @@ Solo hace falta **Python 3.10 o superior**; el zip trae todo lo demás.
     Terminal. Para descargar el zip puedes usar el navegador en lugar de
     `wget`.
 
+## Las claves y rutas de este ordenador
+
+Con el zip, los datos se guardan en la carpeta `datos/` junto al programa.
+La cuenta de DILVE y la ruta del catálogo MARC se escriben en
+[Configuración](../uso/configuracion.md), como en Windows. Si prefieres no
+tenerlas en la carpeta de datos, se pueden poner en un fichero
+`config_local.py` (ver [Ajustes avanzados](ajustes-avanzados.md#config_localpy)).
+
 !!! info "Si también tienes el paquete .deb"
     La versión del zip usa el puerto **8000** y la del servicio `.deb`, el
-    **8765**: pueden funcionar las dos a la vez en el mismo equipo. Para cambiar
-    el puerto del zip, edita `PUERTO` en `config.py`.
-
-## Siguiente paso
-
-Rellena el [directorio de bibliotecas](directorio.md) con, al menos, tu
-biblioteca: es el fichero `datos/bibliotecas.xlsx` de la carpeta de
-Bildumargi.
+    **8765**: pueden funcionar las dos a la vez en el mismo equipo. Para
+    cambiar el puerto del zip, pon otro `PUERTO` en `config_local.py`.
 
 ## Actualizar
 

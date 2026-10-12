@@ -1,3 +1,13 @@
-   /docs export-ignore
-   /mkdocs.yml export-ignore
-   /requirements-docs.txt export-ignore
+* text=auto eol=lf
+*.bat text eol=crlf
+*.png binary
+*.woff2 binary
+*.mp4 binary
+*.xlsx binary
+*.ico binary
+*.ps1 text eol=crlf
+*.iss text eol=crlf
+/docs export-ignore
+/mkdocs.yml export-ignore
+/requirements-docs.txt export-ignore
+/CAPTURAS.md export-ignore

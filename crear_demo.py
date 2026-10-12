@@ -14,7 +14,7 @@ Cómo se usa
 3. Pulsa «Recorrido automático» y espera a que termine: recorre todas las
    pestañas, secciones, fuentes de sugerencias (también las de DILVE) y
    filtros. Puedes pulsar además, a mano, lo que quieras enseñar.
-4. Abre «Administración de la red» con tu clave, para que también se grabe.
+4. Abre la Configuración (rueda dentada), para que también se grabe.
 5. Pulsa «Descargar grabación»: se guarda bildumargi-grabacion.json.
 6. Ejecuta este script:
        python crear_demo.py ruta\\a\\bildumargi-grabacion.json
@@ -59,7 +59,7 @@ Subir archivos: el asistente de carga funciona igual que en la aplicación
 real, pero al pulsar «Analizar» se muestran los resultados ya calculados de
 {biblioteca}, sean cuales sean los archivos elegidos.
 
-Administración de la red: se entra con cualquier clave.
+Configuración: si la instalación tenía clave, se entra con cualquiera.
 
 Si alguna consulta concreta no se grabó al preparar la demo, aparece un
 aviso; en la aplicación real se calcula al momento.
@@ -197,8 +197,8 @@ def main():
     avisos = []
     if "POST /api/analizar" not in datos:
         avisos.append("No se grabó el análisis de los listados: activa la grabación ANTES de subirlos.")
-    if not any(k.startswith("POST /api/admin/entrar") for k in claves):
-        avisos.append("No se grabó la entrada en Administración de la red: el panel de administración no funcionará.")
+    if not any(k.startswith("GET /api/admin/dilve") for k in claves):
+        avisos.append("No se abrió la Configuración durante la grabación: en la demo no se verá el estado de DILVE.")
     if not any(k.startswith("GET /api/sesion/S/sugerencias/autores") for k in claves):
         avisos.append("No hay «Autores más prestados» grabados.")
     if not any(k.startswith("GET /api/sesion/S/sugerencias/novedades") for k in claves):
@@ -210,6 +210,16 @@ def main():
     for clave, valor in datos.items():
         if clave.startswith("GET /api/sesion/S/buscar") and isinstance(valor, dict):
             valor["todas"] = None
+
+    # La demo se enseña fuera: no debe llevar la cuenta de DILVE de la red
+    # (el panel de administración la muestra) ni el pase de administración.
+    for clave, valor in datos.items():
+        if clave.startswith("GET /api/admin/dilve") and isinstance(valor, dict):
+            credenciales = valor.get("credenciales")
+            if isinstance(credenciales, dict) and credenciales.get("usuario"):
+                credenciales["usuario"] = "demo"
+        if clave.startswith("POST /api/admin/entrar") and isinstance(valor, dict) and "token" in valor:
+            valor["token"] = "demo"
 
     salida = args.salida or os.path.join(os.path.dirname(os.path.abspath(args.grabacion)), "Bildumargi-demo")
     if os.path.exists(salida) and not _borrar_carpeta(salida):

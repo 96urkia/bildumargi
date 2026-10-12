@@ -538,7 +538,8 @@ function pintarFicha(ficha) {
   const pares = [
     [t("col_anio"), ficha.anio], [t("ficha_editorial"), ficha.editorial],
     [t("ficha_edicion"), ficha.edicion],
-    [t("col_idioma"), ficha.idioma], [t("col_loc"), ficha.loc],
+    [t("col_idioma"), ficha.idioma_origen && ficha.idioma
+      ? `${ficha.idioma} (${t(`idioma_origen_${ficha.idioma_origen}`)})` : ficha.idioma], [t("col_loc"), ficha.loc],
   ].filter(([, v]) => v);
   if (pares.length) {
     const dl = document.createElement("dl");
@@ -564,171 +565,11 @@ function pintarFicha(ficha) {
 }
 
 
-/* ==========================================================================
-   Valoraciones entre bibliotecas
-   ========================================================================== */
-function estrellas(valor, alElegir) {
-  const caja = document.createElement("div");
-  caja.className = "estrellas" + (alElegir ? "" : " solo-lectura");
-  for (let n = 1; n <= 5; n++) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = n <= (valor || 0) ? "★" : "☆";
-    b.className = n <= (valor || 0) ? "activa" : "";
-    b.setAttribute("aria-label", t("n_estrellas", { n }));
-    if (alElegir) b.addEventListener("click", () => alElegir(n));
-    else b.tabIndex = -1;
-    caja.appendChild(b);
-  }
-  return caja;
-}
-
+/* --- Fechas ------------------------------------------------------------------ */
 function fechaCorta(iso) {
   if (!iso) return "";
   const f = new Date(iso);
   return Number.isNaN(f.getTime()) ? "" : f.toLocaleDateString(LOCALE_FECHAS[IDIOMA] || "es-ES");
-}
-
-function bloqueValoracion(idSistema, datos, alGuardar, alBorrar, alResponder, alBorrarRespuesta) {
-  const caja = document.createElement("div");
-  caja.className = "bloque-valoracion";
-  caja.appendChild(Object.assign(document.createElement("h3"),
-    { textContent: t("valoraciones_titulo") }));
-  caja.appendChild(Object.assign(document.createElement("p"),
-    { className: "firma", textContent: t("firmas_como", { n: datos.biblioteca || "—" }) }));
-
-  if (!datos.disponible) {
-    const aviso = document.createElement("div");
-    aviso.className = "aviso atencion";
-    aviso.textContent = datos.error || t("valoraciones_desactivadas");
-    caja.appendChild(aviso);
-    return caja;
-  }
-
-  // Media de la red
-  const media = document.createElement("div");
-  media.className = "media-valoracion";
-  if (datos.media !== null && datos.media !== undefined) {
-    const cifra = document.createElement("span");
-    cifra.className = "cifra";
-    cifra.appendChild(document.createTextNode(decimal(datos.media, 1)));
-    const sobre = document.createElement("small");
-    sobre.textContent = " / 5";
-    cifra.appendChild(sobre);
-    media.append(cifra, estrellas(Math.round(datos.media)));
-    media.appendChild(Object.assign(document.createElement("span"),
-      { className: "detalle",
-        textContent: t(datos.n_puntuaciones === 1 ? "n_valoraciones_red_una" : "n_valoraciones_red",
-                       { n: datos.n_puntuaciones }) }));
-  } else {
-    media.appendChild(Object.assign(document.createElement("span"),
-      { className: "detalle", textContent: t("sin_valoraciones") }));
-  }
-  caja.appendChild(media);
-
-  // Formulario propio
-  const mia = datos.mia || {};
-  let puntuacion = mia.puntuacion || 0;
-
-  const form = document.createElement("div");
-  form.className = "formulario-valoracion";
-
-  const filaEstrellas = document.createElement("div");
-  filaEstrellas.style.cssText = "display:flex;align-items:center;gap:.6rem;flex-wrap:wrap";
-  const rotulo = document.createElement("span");
-  rotulo.className = "metrica-rotulo";
-  rotulo.style.margin = "0";
-  rotulo.textContent = t("tu_puntuacion");
-  const contenedorEstrellas = document.createElement("span");
-  const pintarEstrellas = () => {
-    contenedorEstrellas.innerHTML = "";
-    contenedorEstrellas.appendChild(estrellas(puntuacion, (n) => {
-      puntuacion = (puntuacion === n) ? 0 : n;  // volver a pulsar quita la nota
-      pintarEstrellas();
-    }));
-  };
-  pintarEstrellas();
-  filaEstrellas.append(rotulo, contenedorEstrellas);
-  form.appendChild(filaEstrellas);
-
-  const texto = document.createElement("textarea");
-  texto.placeholder = t("placeholder_comentario");
-  texto.maxLength = 2000;
-  texto.value = mia.comentario || "";
-  form.appendChild(texto);
-
-  const acciones = document.createElement("div");
-  acciones.className = "acciones-valoracion";
-  const guardar = document.createElement("button");
-  guardar.className = "boton";
-  guardar.textContent = t("guardar_valoracion");
-  acciones.appendChild(guardar);
-
-  if (mia.puntuacion || mia.comentario) {
-    const borrar = document.createElement("button");
-    borrar.className = "boton secundario";
-    borrar.textContent = t("borrar_valoracion");
-    borrar.addEventListener("click", () => alBorrar());
-    acciones.appendChild(borrar);
-  }
-  const contador = document.createElement("span");
-  contador.className = "contador";
-  const refrescarContador = () => { contador.textContent = `${texto.value.length} / 2000`; };
-  refrescarContador();
-  texto.addEventListener("input", refrescarContador);
-  acciones.appendChild(contador);
-  form.appendChild(acciones);
-
-  const error = document.createElement("div");
-  error.style.display = "none";
-  form.appendChild(error);
-
-  guardar.addEventListener("click", async () => {
-    guardar.disabled = true;
-    error.style.display = "none";
-    try {
-      await alGuardar({ puntuacion: puntuacion || null, comentario: texto.value });
-    } catch (e) {
-      error.style.display = "";
-      error.className = "aviso error";
-      error.textContent = e.message;
-      guardar.disabled = false;
-    }
-  });
-  form.appendChild(Object.assign(document.createElement("p"),
-    { className: "normas-uso", textContent: t("normas_uso") }));
-  caja.appendChild(form);
-
-  // Opiniones de las demás bibliotecas
-  const conComentario = (datos.valoraciones || []).filter((v) => v.comentario);
-  if (conComentario.length) {
-    const lista = document.createElement("div");
-    lista.className = "lista-opiniones";
-    for (const v of conComentario) {
-      const op = document.createElement("div");
-      op.className = "opinion" + (v.biblioteca === datos.biblioteca ? " propia" : "");
-      const cabeza = document.createElement("div");
-      cabeza.className = "cabeza";
-      const quien = document.createElement("span");
-      quien.className = "quien";
-      quien.textContent = v.biblioteca;
-      const derecha = document.createElement("span");
-      derecha.style.cssText = "display:flex;align-items:center;gap:.5rem";
-      if (v.puntuacion) derecha.appendChild(estrellas(v.puntuacion));
-      derecha.appendChild(Object.assign(document.createElement("span"),
-        { className: "cuando", textContent: fechaCorta(v.actualizado) }));
-      cabeza.append(quien, derecha);
-      op.appendChild(cabeza);
-      const cuerpo = document.createElement("div");
-      cuerpo.className = "texto";
-      cuerpo.textContent = v.comentario;   // textContent: nunca HTML de terceros
-      op.appendChild(cuerpo);
-      if (alResponder) op.appendChild(hiloRespuestas(v, datos.biblioteca, alResponder, alBorrarRespuesta));
-      lista.appendChild(op);
-    }
-    caja.appendChild(lista);
-  }
-  return caja;
 }
 
 
@@ -1477,7 +1318,7 @@ function ayudaUsoRelativo(extra = []) {
 /* --------------------------------------------------------------------------
    Matriz de compra: cada sección propia según su actualidad (eje X, % del
    fondo editado en los últimos 5 años) y su uso relativo (eje Y). El tamaño
-   del círculo es la oferta de la red (títulos candidatos). El cuadrante
+   del círculo son los volúmenes de la sección. El cuadrante
    superior izquierdo reúne más demanda que peso con un fondo menos
    actualizado: donde una compra tiene más recorrido.
    -------------------------------------------------------------------------- */
@@ -1492,8 +1333,8 @@ function graficoMatrizCompra(puntos, opciones) {
   const maxY = Math.min(3, Math.max(2, ...puntos.map((p) => p.y)) * 1.05);
   const X = (v) => m.izquierda + (Math.min(v, maxX) / maxX) * w;
   const Y = (v) => m.arriba + h - (Math.min(v, maxY) / maxY) * h;
-  const maxOferta = Math.max(1, ...puntos.map((p) => p.oferta));
-  const radio = (v) => 4 + Math.sqrt(v / maxOferta) * Math.min(22, h / 7);
+  const maxTamano = Math.max(1, ...puntos.map((p) => p.tamano));
+  const radio = (v) => 4 + Math.sqrt(v / maxTamano) * Math.min(22, h / 7);
 
   // Cuadrante prioritario sombreado + rótulos de cuadrante, muy discretos
   svg.appendChild(svgEl("rect", { x: m.izquierda, y: m.arriba, width: X(corteX) - m.izquierda, height: Y(1) - m.arriba,
@@ -1519,14 +1360,14 @@ function graficoMatrizCompra(puntos, opciones) {
   svg.appendChild(svgEl("text", { x: X(corteX) + 4, y: m.arriba + h - 4, class: "etiqueta-eje" }, textos.mediana));
 
   // Burbujas: primero las grandes, para que las pequeñas queden encima
-  const orden = puntos.slice().sort((a, b) => b.oferta - a.oferta);
+  const orden = puntos.slice().sort((a, b) => b.tamano - a.tamano);
   const rotular = new Set(orden.filter((p) => p.y >= 1 && p.x < corteX).slice(0, 6).map((p) => p.clave));
   if (seleccion) rotular.add(seleccion);
   orden.forEach((p) => {
     const activa = seleccion && p.clave === seleccion;
     const g = svgEl("g", { class: `burbuja ${p.y >= 1 ? "encima" : "debajo"}${activa ? " activa" : ""}${seleccion && !activa ? " atenuada" : ""}` });
-    g.appendChild(svgEl("circle", { cx: X(p.x), cy: Y(p.y), r: p.oferta ? radio(p.oferta) : 3.5,
-                                    class: p.oferta ? "" : "sin-oferta" }));
+    g.appendChild(svgEl("circle", { cx: X(p.x), cy: Y(p.y), r: p.tamano ? radio(p.tamano) : 3.5,
+                                    class: p.tamano ? "" : "sin-tamano" }));
     g.appendChild(svgEl("title", {}, textos.detalle(p)));
     if (alPulsar) {
       g.setAttribute("tabindex", "0");
@@ -1546,7 +1387,7 @@ function graficoMatrizCompra(puntos, opciones) {
   const candidatos = orden.filter((p) => rotular.has(p.clave))
     .sort((a, b) => (b.clave === seleccion) - (a.clave === seleccion));
   candidatos.forEach((p) => {
-    const r = p.oferta ? radio(p.oferta) : 3.5;
+    const r = p.tamano ? radio(p.tamano) : 3.5;
     const texto = p.etiqueta.length > 24 ? `${p.etiqueta.slice(0, 23)}…` : p.etiqueta;
     const anchoTexto = texto.length * 5.9;
     const cx = X(p.x), cy = Y(p.y);
@@ -1562,58 +1403,6 @@ function graficoMatrizCompra(puntos, opciones) {
       class: `rotulo-burbuja${p.clave === seleccion ? " activa" : ""}` }, texto));
   });
   return svg;
-}
-
-
-/* --- Hilo de respuestas bajo un comentario --------------------------------- */
-function hiloRespuestas(valoracion, miBiblioteca, alResponder, alBorrarRespuesta) {
-  const caja = nodo("div", "hilo");
-  (valoracion.respuestas || []).forEach((r) => {
-    const item = nodo("div", `respuesta${r.biblioteca === miBiblioteca ? " propia" : ""}`);
-    const cabeza = nodo("div", "cabeza");
-    cabeza.append(nodo("span", "quien", r.biblioteca), nodo("span", "cuando", fechaCorta(r.creado)));
-    if (r.biblioteca === miBiblioteca && alBorrarRespuesta) {
-      const borrar = nodo("button", "enlace-discreto", t("borrar"));
-      borrar.addEventListener("click", () => alBorrarRespuesta(r.id));
-      cabeza.appendChild(borrar);
-    }
-    item.appendChild(cabeza);
-    item.appendChild(nodo("div", "texto", r.texto));   // textContent: nunca HTML de terceros
-    caja.appendChild(item);
-  });
-  const abrir = nodo("button", "enlace-discreto", t("responder"));
-  const formulario = nodo("div", "formulario-respuesta oculto");
-  const area = nodo("textarea");
-  area.maxLength = 1000;
-  area.rows = 2;
-  area.placeholder = t("placeholder_respuesta", { n: valoracion.biblioteca });
-  const enviar = nodo("button", "boton pequeno", t("enviar"));
-  const error = nodo("div", "aviso error oculto");
-  enviar.addEventListener("click", async () => {
-    if (!area.value.trim()) return;
-    enviar.disabled = true;
-    try { await alResponder(valoracion.id, area.value); }
-    catch (e) { error.textContent = e.message; error.classList.remove("oculto"); enviar.disabled = false; }
-  });
-  abrir.addEventListener("click", () => { formulario.classList.toggle("oculto"); area.focus(); });
-  formulario.append(area, enviar, error);
-  caja.append(abrir, formulario);
-  return caja;
-}
-
-/* «hace 3 días»: la actividad se lee mejor en tiempo relativo. */
-function fechaRelativa(iso) {
-  const f = new Date(iso);
-  if (Number.isNaN(f.getTime())) return "";
-  const segundos = (f.getTime() - Date.now()) / 1000;
-  const unidades = [["year", 31536000], ["month", 2592000], ["week", 604800], ["day", 86400], ["hour", 3600], ["minute", 60]];
-  try {
-    const rtf = new Intl.RelativeTimeFormat(IDIOMA || "es", { numeric: "auto" });
-    for (const [unidad, s] of unidades) {
-      if (Math.abs(segundos) >= s || unidad === "minute") return rtf.format(Math.round(segundos / s), unidad);
-    }
-  } catch { /* navegador sin RelativeTimeFormat */ }
-  return fechaCorta(iso);
 }
 
 
@@ -1679,9 +1468,7 @@ function graficoEvolucion(puntos, { ancho, alto, color, formato, titulo }) {
   min -= margen; max += margen;
   const X = (i) => m.izquierda + (puntos.length === 1 ? w / 2 : (i / (puntos.length - 1)) * w);
   const Y = (v) => m.arriba + h - ((v - min) / (max - min)) * h;
-  // Si el valor no cambia entre cargas, un solo rótulo (dos superpuestos se leían «20004»)
-  const rotulos = min + margen === max - margen ? [min + margen] : [min + margen, max - margen];
-  rotulos.forEach((v) => {
+  [min + margen, max - margen].forEach((v) => {
     svg.appendChild(svgEl("line", { x1: m.izquierda, x2: m.izquierda + w, y1: Y(v), y2: Y(v), class: "rejilla-linea" }));
     svg.appendChild(svgEl("text", { x: m.izquierda - 6, y: Y(v) + 3.5, "text-anchor": "end", class: "valor-mono" }, formato(v)));
   });

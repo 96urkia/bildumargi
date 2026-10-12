@@ -793,7 +793,7 @@ body.modo-panel .principal {
   display: flex; flex-direction: column; min-height: 0;
   max-width: 1760px; padding: .55rem 1.2rem .55rem;
 }
-body.modo-panel #avisos-globales .aviso { padding: .3rem .75rem; margin-bottom: .4rem; font-size: .76rem; }
+body.modo-panel #avisos-globales .aviso:not(.compacto) { padding: .3rem .75rem; margin-bottom: .4rem; font-size: .76rem; }
 body.modo-panel #analisis { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 body.modo-panel .barra-contexto { margin-bottom: .3rem; }
 body.modo-panel .barra-contexto .titulo-biblioteca { font-size: 1.02rem; }
@@ -1137,7 +1137,7 @@ body.modo-panel #vista { grid-column: 1 / -1; grid-row: 2; height: 100%; }
 .matriz-compra .burbuja circle { fill-opacity: .5; stroke-width: 1.2; transition: fill-opacity .12s; }
 .matriz-compra .burbuja.encima circle { fill: var(--uso-encima); stroke: var(--uso-encima); }
 .matriz-compra .burbuja.debajo circle { fill: var(--uso-debajo); stroke: var(--uso-debajo); }
-.matriz-compra .burbuja circle.sin-oferta { fill-opacity: 0; }
+.matriz-compra .burbuja circle.sin-tamano { fill-opacity: 0; }
 .matriz-compra .burbuja:hover circle, .matriz-compra .burbuja:focus circle { fill-opacity: .85; }
 .matriz-compra .burbuja:focus circle { stroke: #FFFFFF; stroke-width: 2; }
 .matriz-compra .burbuja.activa circle { fill-opacity: .9; stroke: #FFFFFF; stroke-width: 2; }
@@ -1554,9 +1554,30 @@ body.con-informe { overflow: hidden; }
    ========================================================================== */
 .rejilla-seguimiento {
   flex: 1; min-height: 0; display: grid; gap: .6rem;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows: auto auto minmax(170px, 1.2fr) minmax(150px, 1fr);
 }
+/* Arriba, a todo lo ancho; abajo, historial de cargas | altas y bajas */
+.rejilla-seguimiento > .aviso, .rejilla-seguimiento > .fila-seguimiento,
+.rejilla-seguimiento > .zona-evolucion { grid-column: 1 / -1; }
+.zona-cambios .cuerpo-cuadro { display: flex; flex-direction: column; min-height: 0; }
+.zona-cambios .tabla-desplazable { flex: 1; min-height: 0; }
+.barra-cambios { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; margin-bottom: .5rem; }
+.secciones-cambios { font-size: .76rem; color: var(--texto-suave); }
+/* Avisos con un enlace de acción («Ver en Seguimiento», «Ver cuánto supone») */
+.aviso .enlace-aviso { margin-left: .5rem; }
+/* Descarga del catálogo: el aviso grande antes de confirmar */
+.cifras-catalogo { font-variant-numeric: tabular-nums; }
+.aviso-grande {
+  border: 2px solid var(--ambar, #e0a400); border-radius: var(--radio, 8px);
+  background: color-mix(in srgb, var(--ambar, #e0a400) 12%, transparent);
+  padding: .9rem 1.1rem; margin: .8rem 0;
+}
+.aviso-grande h3 { margin: 0 0 .4rem; font-size: 1.05rem; }
+.aviso-grande p { margin: .35rem 0; }
+.aviso-grande .cifra-grande { font-size: 1.35rem; font-weight: 700; }
+.barra-progreso { height: 8px; border-radius: 4px; background: var(--panel-alto); overflow: hidden; margin: .6rem 0; }
+.barra-progreso span { display: block; height: 100%; background: var(--azul); transition: width .4s; }
 .rejilla-seguimiento > * { min-width: 0; min-height: 0; }
 .rejilla-seguimiento > .aviso { margin: 0; }
 .fila-indicadores.fila-seguimiento { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -1594,7 +1615,8 @@ body.con-informe { overflow: hidden; }
 .lista-pestanas input:disabled + * , .lista-pestanas label:has(input:disabled) { color: var(--texto-tenue); }
 
 @media (max-height: 720px), (max-width: 1100px) {
-  .rejilla-seguimiento, .rejilla-seguimiento:not(:has(> .aviso)) { grid-template-rows: none; grid-auto-rows: auto; }
+  .rejilla-seguimiento, .rejilla-seguimiento:not(:has(> .aviso)) { grid-template-rows: none; grid-auto-rows: auto; grid-template-columns: minmax(0, 1fr); }
+  .zona-cambios { min-height: 320px; }
   .zona-evolucion { height: 280px; } .zona-cargas { min-height: 260px; }
 }
 @media (max-width: 1100px) {
@@ -1615,7 +1637,7 @@ body.con-informe { overflow: hidden; }
 
 /* ==========================================================================
    Sugerencias de compra: listas por fuente y cajón de detalle
-   La banda de arriba (indicadores, matriz y oferta) no cambia entre fuentes.
+   La banda de arriba (indicadores, matriz y demanda) no cambia entre fuentes.
    ========================================================================== */
 .panel-compras { position: relative; }
 .conmutador-fuente { align-self: flex-end; }
@@ -1655,7 +1677,7 @@ body.con-informe { overflow: hidden; }
 .portada.mediana { width: 62px; height: 90px; font-size: .9rem; }
 /* «.portada» también es la cabecera de la pantalla de bienvenida, que lleva
    márgenes: en las portadas de libro no deben aplicarse. */
-.portada.pequena, .portada.mediana, .portada.grande { margin: 0; max-width: none; }
+.portada.pequena, .portada.mediana, .portada.grande, .portada.mini { margin: 0; max-width: none; }
 .portada.grande { width: 96px; height: 140px; font-size: 1.1rem; }
 .rejilla-libros { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .8rem; padding: .2rem; }
 .tarjeta-libro { display: flex; flex-direction: column; align-items: flex-start; gap: .3rem; padding: .5rem;
@@ -1868,3 +1890,79 @@ body.modo-panel #analisis { display: flex; flex-direction: column; }
 }
 .boton-pagina:hover:not(:disabled) { border-color: var(--texto-suave); }
 .boton-pagina:disabled { opacity: .35; cursor: default; }
+
+/* ==========================================================================
+   Series
+   ========================================================================== */
+.vista-series { display: flex; flex-direction: column; gap: .6rem; }
+.barra-series { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .6rem 1.2rem; }
+.resumen-series { margin-left: auto; font-size: .8rem; color: var(--texto-suave); }
+.rejilla-series { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .7rem; }
+.tarjeta-serie {
+  display: flex; flex-direction: column; gap: .35rem; text-align: left; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio);
+  padding: .8rem .9rem; color: inherit; font: inherit;
+}
+.tarjeta-serie:hover, .tarjeta-serie:focus-visible { border-color: var(--azul); background: var(--panel-alto); }
+.nombre-serie { font-weight: 600; font-size: 1rem; line-height: 1.25; }
+.datos-serie { font-size: .8rem; color: var(--texto-suave); }
+.uso-serie { display: flex; align-items: center; gap: .5rem; font-size: .76rem; color: var(--texto-suave); }
+.uso-serie .pista { flex: 1; height: 6px; border-radius: 3px; background: var(--panel-alto); overflow: hidden; }
+.uso-serie .relleno { display: block; height: 100%; background: var(--azul); }
+.marcas-serie { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .15rem; }
+.detalle-serie .tabla-serie { flex: none; height: auto; max-height: 60vh; overflow: auto; }
+.detalle-serie .tabla-serie .envoltorio-tabla { position: static; overflow: visible; }
+.estado-tomo.hueco, .estado-tomo.posterior { color: var(--ambar); font-weight: 600; }
+.estado-tomo.posible { color: var(--texto-suave); font-style: italic; }
+.lista-ocultas { list-style: none; padding: 0; margin: .5rem 0; }
+.lista-ocultas li { display: flex; justify-content: space-between; gap: 1rem; padding: .3rem 0; border-bottom: 1px solid var(--borde); }
+
+/* ---------- Avisos de arriba: etiquetas compactas ------------------------- */
+#avisos-globales { display: flex; flex-wrap: wrap; gap: .35rem .45rem; margin-bottom: .5rem; }
+#avisos-globales:empty { display: none; }
+#avisos-globales .aviso.compacto {
+  display: inline-flex; align-items: center; gap: .45rem; max-width: 100%; margin: 0;
+  padding: .22rem .3rem .22rem .3rem; border-radius: 14px; border-left-width: 1px;
+  font-size: .76rem; line-height: 1.35; background: var(--panel);
+}
+#avisos-globales .aviso.compacto::before {
+  content: "i"; flex: none; display: grid; place-items: center; width: 1.15rem; height: 1.15rem;
+  border-radius: 50%; font-size: .7rem; font-weight: 700; color: #fff; background: var(--azul);
+}
+#avisos-globales .aviso.compacto.atencion::before { content: "!"; background: var(--ambar); color: #1a1a1a; }
+#avisos-globales .aviso.compacto.error::before { content: "!"; background: var(--rosa); }
+#avisos-globales .aviso.compacto.ok::before { content: "✓"; background: var(--verde); }
+#avisos-globales .aviso.compacto .enlace-aviso { margin-left: 0; white-space: nowrap; }
+.cerrar-aviso { flex: none; background: none; border: 0; cursor: pointer; color: var(--texto-tenue);
+  font-size: 1rem; line-height: 1; padding: 0 .3rem; border-radius: 50%; }
+.cerrar-aviso:hover { color: var(--texto); background: var(--panel-alto); }
+
+/* ---------- Configuración con menú lateral -------------------------------- */
+.modal.modal-config { max-width: 1000px; height: 86vh; display: flex; flex-direction: column; overflow: hidden; }
+.modal.modal-config .cuerpo-modal { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.modal.modal-config .cuerpo-modal > .config { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.config-marco { flex: 1; min-height: 0; display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 1.2rem; }
+.menu-config { display: flex; flex-direction: column; gap: .15rem; border-right: 1px solid var(--borde); padding-right: .8rem; overflow-y: auto; }
+.menu-config button {
+  text-align: left; background: none; border: 0; border-radius: var(--radio-pequeno); color: var(--texto-suave);
+  padding: .5rem .65rem; font: inherit; font-size: .86rem; cursor: pointer;
+}
+.menu-config button:hover { background: var(--panel-alto); color: var(--texto); }
+.menu-config button.activo { background: var(--panel-alto); color: var(--texto); font-weight: 600; box-shadow: inset 3px 0 0 var(--azul); }
+.paneles-config { overflow-y: auto; min-height: 0; padding-right: .3rem; }
+.panel-config > fieldset:first-child { margin-top: 0; }
+.modal.modal-config .pie-config { border-top: 1px solid var(--borde); padding-top: .7rem; margin-top: .7rem; }
+@media (max-width: 760px) {
+  .config-marco { grid-template-columns: minmax(0, 1fr); }
+  .menu-config { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--borde); padding: 0 0 .5rem; }
+}
+
+/* ---------- Series: portadas --------------------------------------------- */
+.tarjeta-serie { flex-direction: row; align-items: flex-start; gap: .75rem; }
+.cuerpo-serie { display: flex; flex-direction: column; gap: .3rem; min-width: 0; flex: 1; }
+.portada.mini { width: 26px; height: 38px; font-size: .55rem; }
+.cabeza-detalle-serie { display: flex; gap: 1rem; align-items: flex-start; margin-bottom: .8rem; }
+.cabeza-detalle-serie .datos-serie { margin: 0 0 .6rem; }
+.detalle-serie td { vertical-align: middle; }
+.estado-marc { margin-top: .6rem; }
+.estado-marc .aviso { margin: .4rem 0; }

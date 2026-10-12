@@ -1,8 +1,7 @@
 # Informe imprimible
 
 El botón **Informe**, junto a **Cambiar ficheros**, abre una vista previa en
-hojas A4 que se imprime o se guarda como PDF desde el navegador, sin conexión
-a internet.
+hojas A4 que se imprime o se guarda como PDF, sin conexión a internet.
 
 ![Primera página del informe imprimible: indicadores, radiografía y peso y uso relativo por sección](../img/informe-vista-previa.png){ width="600" }
 
@@ -16,16 +15,15 @@ pestañas:
 2. **La colección sección a sección**: volúmenes, peso, préstamo, uso
    relativo, año medio y porcentaje de los últimos cinco años, más los años de
    edición.
-3. **Prioridades de compra** (si la red tiene el catálogo colectivo): dónde
-   tiene más recorrido una compra y títulos sugeridos de las secciones
-   prioritarias.
+3. **Dónde hace más falta comprar**: la matriz que cruza el uso relativo de
+   cada sección con su actualidad, y la lista de secciones prioritarias.
 4. **Notas de método**: qué es el uso relativo, de dónde sale el préstamo y la
    fuente de la referencia por habitante.
 
 ## Cómo guardarlo en PDF
 
 1. Pulsa **Imprimir o guardar PDF**.
-2. En el diálogo del navegador, elige como impresora **Guardar como PDF**.
+2. En el diálogo de impresión, elige como impresora **Guardar como PDF**.
 3. Guarda.
 
 El informe se imprime siempre en tema claro. La opción **Para blanco y

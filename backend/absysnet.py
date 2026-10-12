@@ -248,14 +248,10 @@ def prestamos_del_listado(texto):
     return salida
 
 
-def procesar_datos(topo_bytes, nunca_bytes, mas2_bytes, catalogo_bytes, anio_actual=2026):
-    """Devuelve (registros, huerfanos, fichas).
-
-    `registros` es una lista de diccionarios, uno por ejemplar del
-    topográfico. Si algo falla devuelve (None, mensaje_de_error, {})."""
-    if not topo_bytes:
-        return None, "Falta el listado topográfico.", {}
-
+def leer_topografico(topo_bytes):
+    """Un ejemplar por código de barras del listado topográfico: signatura,
+    título y localización. Lo usan el análisis y la comparación de cargas
+    (altas y bajas)."""
     topo_text = utils.decodificar_bytes(topo_bytes)
     vistos = set()
     registros = []
@@ -279,6 +275,18 @@ def procesar_datos(topo_bytes, nunca_bytes, mas2_bytes, catalogo_bytes, anio_act
             "titulo": campos["titulo"].rstrip(" /") or "(título no detectado)",
             "loc": campos["loc"] or "Sin dato",
         })
+    return registros
+
+
+def procesar_datos(topo_bytes, nunca_bytes, mas2_bytes, catalogo_bytes, anio_actual=2026):
+    """Devuelve (registros, huerfanos, fichas).
+
+    `registros` es una lista de diccionarios, uno por ejemplar del
+    topográfico. Si algo falla devuelve (None, mensaje_de_error, {})."""
+    if not topo_bytes:
+        return None, "Falta el listado topográfico.", {}
+
+    registros = leer_topografico(topo_bytes)
 
     if not registros:
         return None, ("No se ha podido leer ninguna línea del topográfico. "
@@ -359,6 +367,6 @@ def procesar_datos(topo_bytes, nunca_bytes, mas2_bytes, catalogo_bytes, anio_act
         r["materias_texto"] = " | ".join(ficha.get("materias") or [])
         if ficha.get("titulo"):
             r["titulo"] = ficha["titulo"]
-        r["idioma"] = None  # se completa después con la base de la red
+        r["idioma"] = None  # se completa después con DILVE o la signatura (idiomas.py)
 
     return registros, total_topo - len(registros), fichas

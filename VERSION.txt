@@ -1,10 +1,114 @@
 Bildumargi
-Versión: 1.1
+Versión: 2.0
 Licencia: AGPLv3
 
-Primera versión estable, pensada para desplegarse en un servidor de la
-intranet de una red de bibliotecas (ver la guía de despliegue) o para usarse
-en un solo ordenador con iniciar.bat / iniciar.sh.
+Versión para bibliotecas individuales: se instala en Windows con un
+instalador (acceso directo y ventana propia), con iniciar.bat / iniciar.sh, o
+en un servidor Linux con el paquete .deb. Manual:
+https://96urkia.github.io/bildumargi/
+
+Cambios de la versión 2.0
+--------------------------
+La 2.0 se centra en bibliotecas individuales: deja de depender del catálogo
+colectivo de la red y toma de DILVE lo que antes salía del MARC.
+
+- Las claves y rutas de cada ordenador van en config_local.py, que no se
+  sube al repositorio ni entra en el zip. config.py ya no trae claves.
+- Sin clave de administración por defecto (antes era «admin»).
+- La demo ya no incluye el usuario de DILVE.
+- Se retira todo lo que necesitaba la base de la red: la fuente «Presencia
+  en bibliotecas», la pestaña «Red» (valoraciones y comentarios entre
+  bibliotecas), conversor.py y la orden «bildumargi conversor».
+- Sugerencias de compra aparece cuando hay DILVE (antes, solo con la base de
+  la red), con dos fuentes: Autores más prestados y Novedades.
+- «¿Dónde hace más falta comprar?»: el tamaño de cada círculo son los
+  volúmenes de la sección. El informe imprimible incluye siempre esa hoja.
+- Una sola biblioteca y una sola configuración (datos/configuracion.json):
+  sus datos (nombre, población, superficie), apariencia, pestañas,
+  historial, tabla de signaturas y DILVE, en la misma pantalla. Sin
+  administración de la red aparte: la clave (CLAVE_ADMIN) es opcional y, si
+  se pone, protege toda la configuración.
+- Fuera el directorio de bibliotecas (bibliotecas.xlsx) y el acceso con clave
+  por biblioteca. La primera carga apunta el código de sucursal de los
+  listados; si un día llegan de otra sucursal, se avisa y esa carga no entra
+  en el historial. «Olvidar la sucursal» permite cambiar de biblioteca.
+- «Abrir el último análisis» en la pantalla de inicio, sin clave.
+- Al pasar de la 1.x se importan solos los datos de la biblioteca del antiguo
+  bibliotecas.xlsx, su configuración y la de la red, y su historial.
+- El año de referencia es el año en curso (antes, fijo en config.py).
+- Idioma de cada ejemplar sin la base de la red: sale de la ficha de DILVE del
+  libro (por ISBN, de lo ya descargado) o, si no la hay, de la primera palabra
+  de la signatura cuando es una marca de lengua (EUS, ENG, FRA…). Lo demás
+  queda «Sin determinar». La ficha del ejemplar dice si el idioma se ha
+  deducido de la signatura.
+- «Fichas de DILVE de todo el catálogo»: antes de pedir nada, un aviso bien
+  visible con las cifras (ISBN pendientes, llamadas, minutos y días con la
+  cuota) y la advertencia para fondos grandes o redes; solo empieza si se
+  confirma. Se puede parar y continuar otro día. Se ofrece al abrir un
+  análisis con poco idioma conocido y desde Configuración.
+- Altas y bajas en cada carga, por código de barras, respecto a la carga
+  anterior: aviso al cargar, panel en Seguimiento (por sección, lista y CSV)
+  y columnas en el historial de cargas. Para las cargas ya guardadas se
+  calculan la primera vez que se abre Seguimiento.
+- Pestaña «Series»: colecciones de DILVE con tomos numerados que tiene la
+  biblioteca (las colecciones de editorial sin numerar no cuentan; las que
+  se cuelen se pueden ocultar). Un recuadro por serie y, al pulsarlo, cada
+  tomo con su año, sus préstamos y si está o falta: huecos en la numeración
+  y tomos posteriores que DILVE ya conoce. Los libros propios sin ficha de
+  DILVE que parecen de la serie salen como «Posiblemente de esta serie».
+- Corregida la lectura del número de tomo de las fichas de DILVE (venía en
+  un apartado que no se leía). Las fichas ya descargadas con colección se
+  vuelven a pedir una vez, dentro de la descarga del catálogo.
+- Series: es serie una colección numerada cuyos tomos son casi todos del
+  mismo autor o llevan su nombre en el título (las colecciones de editorial
+  numeradas ya no cuentan). Portada del primer tomo en cada recuadro y en
+  el detalle, con miniatura por tomo. Botón «Buscar los tomos en Todos tus
+  libros» (catálogo de las librerías de CEGAL), que se abre aparte.
+- Los tomos de las series de la biblioteca que llegan en Novedades se
+  conservan al salir de la ventana de meses: con el tiempo se conocen más
+  tomos de cada serie.
+- Avisos de arriba compactos, cada uno con su «×». La fecha de la carga que
+  se está viendo va con los datos de la biblioteca.
+- Configuración con menú lateral: Tu biblioteca, Apariencia e idioma,
+  Pestañas, Historial de cargas, Secciones por signatura, DILVE, Fichas de
+  todo el catálogo y Series ocultas.
+- El aviso para descargar las fichas del catálogo solo sale si queda algo
+  por pedir.
+- Idioma desde el catálogo MARC, combinado con DILVE: Configuración →
+  Catálogo MARC extrae una vez, de un .db generado con conversor.py (el de la
+  red o el del propio catálogo), el idioma de los ejemplares de la biblioteca
+  a datos/marc_idiomas.db (unos cientos de KB). Orden: MARC si el código es
+  válido, DILVE, signatura. Con el fondo de Monteagudo, del 45 % al 99 % de
+  idioma conocido. Avisa si el .db ha cambiado desde la extracción.
+- Vuelve conversor.py (y la orden «bildumargi conversor» en Linux), ahora para
+  el idioma; con --sin-marc --sin-fts la base es ligera.
+- «Completar las series»: pide a DILVE (con el mismo aviso y confirmación que
+  la descarga del catálogo) las fichas de los libros que pueden ser tomos de
+  las series: los «del mismo autor» que dan las fichas de los tomos propios y
+  los de esos autores en el catálogo de la red (se guardan al extraer los
+  idiomas del MARC). Así aparecen los tomos posteriores al último propio y
+  los huecos con título; renueva además las fichas propias de más de un mes
+  para recoger los tomos recién publicados.
+- Series: si una serie numera sus títulos («Anna Kadabra 7. …»), lo que no
+  sigue ese patrón (una subserie) no ocupa el número de un tomo.
+- Aplicación de escritorio para Windows: instalador
+  (Bildumargi-2.0-instalador.exe) sin permisos de administrador, con acceso
+  directo en el escritorio y en el menú Inicio, Python dentro y ventana
+  propia (WebView2). Durante la instalación se pueden escribir los datos de
+  la biblioteca, la cuenta de DILVE y la ruta del catálogo MARC (todo
+  opcional y cambiable en Configuración). Los datos van en
+  %LOCALAPPDATA%\Bildumargi\datos: actualizar no los toca y al desinstalar
+  se pregunta si se borran. Se construye con packaging\windows\construir.ps1.
+- Con la ruta del MARC puesta y sin extraer, el idioma se extrae solo en el
+  primer análisis.
+- «Autores más prestados» cuenta por autor, con todos sus libros: títulos y
+  ejemplares en el fondo, ejemplares prestados, préstamos y uso relativo. El
+  núcleo es de autores (los que suman la mitad de los préstamos de cada
+  sección), se buscan las obras nuevas desde todos sus libros y el orden
+  pondera los préstamos por la parte de sus ejemplares que sale. Cada
+  sugerencia lo explica («Javier Castillo: 8 títulos en tu fondo · 8 de 8
+  ejemplares prestados · 116 préstamos (el más prestado: …)»). Sin ediciones
+  repetidas de la misma obra.
 
 Cambios de la versión 1.1
 -------------------------

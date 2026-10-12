@@ -12,6 +12,7 @@ muestra su perfil:
 
 - **Años de edición**: cuántos volúmenes hay de cada año.
 - **Localizaciones**: dónde están los ejemplares.
+- **Idiomas**: en qué lenguas está la selección, si se conoce el idioma.
 - **Ejemplares**: la lista completa, con signatura, código de barras, título y
   préstamo, descargable en CSV.
 
@@ -37,10 +38,10 @@ entran mientras el filtro esté activo.
 
 ![Secciones filtradas por localización y editado hasta el año 2000](../img/secciones-anios.png)
 
-## Valorar un ejemplar propio
+## La ficha de un ejemplar
 
-Si tu fondo está enlazado con el catálogo de la red, al pulsar un ejemplar se
-abre su ficha, donde puedes [valorarlo y comentarlo](red.md).
+Al pulsar un ejemplar se abre su ficha catalográfica, con su idioma y de dónde
+sale ese dato (catálogo MARC, DILVE o signatura).
 
 !!! tip "¿Las secciones no son las de tu biblioteca?"
     Si usas signaturas propias (por ejemplo, `VIA` para viajes o `EUS` para

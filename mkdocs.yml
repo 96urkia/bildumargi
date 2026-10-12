@@ -62,24 +62,22 @@ nav:
       - uso/index.md
       - Exportar los listados de AbsysNet: uso/exportar-absysnet.md
       - Cargar los listados: uso/cargar-listados.md
-      - Entrar con clave: uso/entrar-con-clave.md
       - Diagnóstico: uso/diagnostico.md
       - Secciones: uso/secciones.md
+      - Series: uso/series.md
       - Informe imprimible: uso/informe.md
       - Sugerencias de compra: uso/sugerencias-compra.md
       - Novedades de DILVE: uso/novedades.md
       - Seguimiento: uso/seguimiento.md
-      - Red y valoraciones: uso/red.md
-      - Configuración de la biblioteca: uso/configuracion.md
+      - Configuración: uso/configuracion.md
   - Instalación y administración:
       - administracion/index.md
       - Requisitos y modos de uso: administracion/requisitos.md
-      - Instalar en un ordenador: administracion/instalar-ordenador.md
+      - Instalar en Windows: administracion/instalar-windows.md
+      - Instalar con Python: administracion/instalar-ordenador.md
       - Instalar en un servidor Linux: administracion/instalar-servidor.md
-      - Directorio de bibliotecas: administracion/directorio.md
-      - Catálogo colectivo de la red: administracion/catalogo-red.md
-      - Administración de la red: administracion/panel-red.md
       - DILVE: administracion/dilve.md
+      - Catálogo MARC (idioma): administracion/catalogo-marc.md
       - Ajustes avanzados: administracion/ajustes-avanzados.md
       - Copias y actualizaciones: administracion/copias-actualizaciones.md
   - Referencia:
@@ -88,6 +86,7 @@ nav:
       - Problemas frecuentes: referencia/problemas.md
   - Cómo funciona:
       - El uso relativo: explicacion/uso-relativo.md
+      - El idioma de cada ejemplar: explicacion/idioma.md
       - El modelo de préstamo: explicacion/modelo-prestamo.md
       - Datos y privacidad: explicacion/privacidad.md
   - Acerca de: acerca.md

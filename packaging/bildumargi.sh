@@ -2,7 +2,7 @@
 # /usr/bin/bildumargi — orden única para usar Bildumargi instalado con el paquete .deb
 #
 #   bildumargi servir               arranca el servidor (lo usa el servicio systemd)
-#   bildumargi conversor FICHERO    convierte el MARC21 de la red en la base de datos
+#   bildumargi conversor FICHERO    convierte una exportación MARC en un .db (idioma de los ejemplares)
 #   bildumargi demo GRABACION       crea una demostración sin servidor
 #   bildumargi version              muestra la versión instalada
 set -e

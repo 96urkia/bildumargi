@@ -7,46 +7,53 @@ página, sustituye el recuadro «Captura pendiente» por:
 
 En `docs/index.md` la ruta es `img/nombre.png`, sin `../`.
 
-Recomendaciones: Firefox al 100 %, ventana de al menos 1400 px de ancho,
-mismo tema en todas, sin claves, fechas ni datos personales a la vista. Las
-portadas y los resúmenes de DILVE se difuminan.
+Recomendaciones: ventana de al menos 1400 px de ancho, mismo tema en todas,
+sin claves, fechas ni datos personales a la vista. Las portadas y los
+resúmenes de DILVE se difuminan.
 
-## Colocadas (33)
+## Nuevas en la 2.0 (7)
 
-- `img/administracion-red-1.png`
-- `img/administracion-red-2.png`
-- `img/arranque-windows.png`
-- `img/asistente-completo.png`
-- `img/asistente-paso1.png`
-- `img/compras-autores.png`
-- `img/compras-ficha.png`
-- `img/compras-panel.png`
-- `img/compras-seccion.png`
-- `img/configuracion.png`
-- `img/diagnostico-completo.png`
-- `img/diagnostico-filtro.png`
-- `img/diagnostico-indicadores.png`
-- `img/entrar-con-clave.png`
-- `img/informe-vista-previa.png`
-- `img/novedades-afines.png`
-- `img/novedades-buscar.png`
-- `img/novedades-rejilla.png`
-- `img/ord-linux-iniciar.png`
-- `img/ord-linux-pip.png`
+Están marcadas con un recuadro «Captura pendiente» en su página.
+
+| Fichero | Página | Qué debe verse |
+|---|---|---|
+| `img/series-panel.png` | uso/series.md | Pestaña Series: recuadros con portada, tomos, años, barra de préstamo y etiquetas «Faltan» y «posterior». |
+| `img/series-detalle.png` | uso/series.md | Detalle de una serie: miniaturas, número, título, año, préstamos y estado, con los que faltan en ámbar. |
+| `img/win-instalador-biblioteca.png` | administracion/instalar-windows.md | Instalador: pantalla «Tu biblioteca». |
+| `img/win-instalador-dilve.png` | administracion/instalar-windows.md | Instalador: pantalla «Cuenta de DILVE» (contraseña oculta). |
+| `img/win-acceso-directo.png` | administracion/instalar-windows.md | El acceso directo de Bildumargi en el escritorio. |
+| `img/catalogo-dilve-aviso.png` | administracion/dilve.md | El aviso «Antes de empezar, lee esto» con las llamadas y los minutos. |
+| `img/config-marc.png` | administracion/catalogo-marc.md | Configuración → Catálogo MARC, con la ruta y el resultado de la extracción. |
+
+## Hay que rehacerlas (5)
+
+La pantalla ha cambiado. Las que tienen recuadro «Captura pendiente» ya no
+se enseñan; las otras siguen puestas hasta que se sustituyan.
+
+| Fichero | Página | Qué ha cambiado |
+|---|---|---|
+| `img/asistente-completo.png` | uso/cargar-listados.md | «Entrar con clave» pasa a ser «Último análisis», encima del asistente. (recuadro) |
+| `img/configuracion.png` | uso/configuracion.md | Configuración con menú lateral; mejor con «Tu biblioteca» abierto. (recuadro) |
+| `img/seguimiento.png` | uso/seguimiento.md | Nuevo panel «Altas y bajas» junto a las cargas guardadas. (recuadro) |
+| `img/compras-autores.png` | uso/sugerencias-compra.md | Cada propuesta explica el autor con todos sus libros. (recuadro) |
+| `img/compras-seccion.png` | uso/sugerencias-compra.md | Ya no hay «Presencia en bibliotecas» ni «oferta de la red»: mejor con Autores más prestados y una sección pulsada. |
+
+## Conviene rehacerlas, sin prisa (5)
+
+Siguen sirviendo, pero tienen detalles de la 1.1 (avisos grandes arriba, el
+nombre de la red en la cabecera, el aviso «Sin base de datos enlazada»).
+
 - `img/portada-diagnostico.png`
-- `img/red-actividad.png`
-- `img/secciones-anios.png`
-- `img/secciones-buscar.png`
-- `img/secciones-csv.png`
-- `img/secciones-treemap.png`
-- `img/seguimiento.png`
-- `img/srv-carpeta-datos.png`
-- `img/srv-carpeta-gestor.png`
-- `img/srv-estado-servicio.png`
-- `img/srv-instalacion.png`
+- `img/diagnostico-completo.png`
+- `img/diagnostico-indicadores.png`
+- `img/diagnostico-filtro.png`
 - `img/srv-primera-pantalla.png`
-- `img/srv-secretos.png`
 
-## Pendientes
+## Siguen valiendo (17)
 
-Ninguna.
+`arranque-windows`, `asistente-paso1`, `informe-vista-previa`,
+`novedades-afines`, `novedades-buscar`, `novedades-rejilla`,
+`ord-linux-iniciar`, `ord-linux-pip`, `secciones-anios`, `secciones-buscar`,
+`secciones-csv`, `secciones-treemap`, `srv-carpeta-datos`,
+`srv-estado-servicio`, `srv-instalacion`, `srv-secretos` y `srv-carpeta-gestor`
+(esta última ya no se usa en ninguna página).

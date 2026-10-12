@@ -5,14 +5,15 @@ listados que ya exporta AbsysNet. En unos minutos responde a tres preguntas:
 
 - **¿Qué se usa y qué no?** Qué secciones rinden más de lo que pesan en el
   fondo y cuáles apenas se mueven.
-- **¿Cómo está la colección?** Volúmenes, documentos por habitante, antigüedad
-  y reparto por secciones, lenguas y localizaciones.
-- **¿Qué conviene comprar?** Títulos que tienen otras bibliotecas de la red,
-  otras obras de los autores más prestados y novedades editoriales ordenadas
-  por el préstamo que se espera de ellas.
+- **¿Cómo está la colección?** Volúmenes, documentos por habitante, antigüedad,
+  reparto por secciones, lenguas y localizaciones, series y altas y bajas
+  entre un análisis y el siguiente.
+- **¿Qué conviene comprar?** Otras obras de los autores que más se prestan,
+  los tomos que faltan de tus series y las novedades editoriales ordenadas por
+  el préstamo que se espera de ellas.
 
-Es gratuito y libre (licencia AGPLv3), funciona sin conexión a internet y no
-usa datos de lectores.
+Es gratuito y libre (licencia AGPLv3), se instala en Windows como cualquier
+programa y no usa datos de lectores.
 
 ![El panel de Diagnóstico de una biblioteca, con los indicadores arriba, el peso y uso relativo por sección y los años de edición](img/portada-diagnostico.png)
 
@@ -28,11 +29,11 @@ El manual tiene dos partes, según quién lo lea:
     recorrido de veinte minutos. Después, [Uso diario](uso/index.md) explica
     cada pantalla.
 
--   **Jefaturas de servicio e informática**
+-   **Instalación y configuración**
 
     [Instalación y administración](administracion/index.md) explica cómo
-    instalar Bildumargi, preparar el directorio de bibliotecas, conectar el
-    catálogo de la red y DILVE, y gestionar la configuración común.
+    instalar Bildumargi en Windows o en un servidor, y cómo conectar DILVE y
+    el catálogo MARC.
 
 </div>
 
@@ -41,5 +42,8 @@ quieres entender por qué Bildumargi calcula lo que calcula, a
 [Cómo funciona](explicacion/uso-relativo.md).
 
 !!! info "Versión"
-    Este manual corresponde a **Bildumargi 1.1**. Las descargas están en la
-    [página de versiones](https://github.com/96urkia/bildumargi/releases).
+    Este manual corresponde a **Bildumargi 2.0**, pensada para que cada
+    biblioteca la instale y la use por su cuenta. Las descargas están en la
+    [página de versiones](https://github.com/96urkia/bildumargi/releases). El
+    manual de la 1.1, la versión para redes, sigue en el historial del
+    proyecto.

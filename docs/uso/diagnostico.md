@@ -10,13 +10,15 @@ Describe siempre la colección completa.
 | Indicador | Qué mide |
 |---|---|
 | **Volúmenes** | Ejemplares del listado topográfico. |
-| **Documentos por habitante** | Volúmenes entre la población atendida, comparados con la referencia de la red (por defecto, las Pautas de 2002: de 1,5 a 2,5). |
+| **Documentos por habitante** | Volúmenes entre la población atendida, comparados con la referencia (por defecto, las Pautas de 2002: de 1,5 a 2,5). |
 | **Índice de circulación** | Porcentaje de ejemplares que han salido en préstamo en el periodo de los listados. |
 | **Editado en los últimos 5 años** | Peso de lo reciente en la colección. |
 | **Año medio de edición** | Antigüedad media del fondo. |
 | **Secciones distintas** | Número de secciones con fondo. |
 
-Definiciones completas en [Indicadores](../referencia/indicadores.md).
+La población y la superficie se escriben en [Configuración](configuracion.md),
+apartado **Tu biblioteca**. Definiciones completas en
+[Indicadores](../referencia/indicadores.md).
 
 !!! info "En municipios pequeños es normal superar la referencia"
     Una biblioteca necesita un fondo básico sea cual sea su población. La
@@ -44,7 +46,8 @@ La barra de arriba acota todo el panel:
 - **Buscar por signatura**: con comodines, como en [Secciones](secciones.md#buscar-por-signatura).
 - **Localización**: solo los ejemplares de una localización.
 - **Público**: adultos, infantil o todo el fondo.
-- **Idioma**: si la red tiene el catálogo colectivo conectado.
+- **Idioma**: en cuanto se conoce el idioma de los ejemplares (ver
+  [El idioma de cada ejemplar](../explicacion/idioma.md)).
 
 Los indicadores, el gráfico y la lectura automática se recalculan para la
 selección. La lectura lo advierte: «Esta lectura describe solo la selección

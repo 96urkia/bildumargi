@@ -9,15 +9,15 @@ import collections
 import hashlib
 import hmac
 import json
+import math
 import os
 import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
 import uuid
-from typing import Optional
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -25,14 +25,15 @@ from pydantic import BaseModel
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config  # noqa: E402
-from backend import absysnet, analisis, basedatos, bibliotecas, clasificacion  # noqa: E402
-from backend import valoraciones as mod_valoraciones  # noqa: E402
-from backend import preferencias as mod_preferencias  # noqa: E402
-from backend import almacen as mod_almacen, configuracion_red as mod_config_red  # noqa: E402
+from backend import absysnet, analisis, bibliotecas, clasificacion  # noqa: E402
+from backend import almacen as mod_almacen, configuracion as mod_configuracion  # noqa: E402
 from backend import dilve as mod_dilve, materias as mod_materias, sugerencias as mod_sugerencias  # noqa: E402
-from backend import idiomas as mod_idiomas, recomendaciones, utils  # noqa: E402
+from backend import idiomas as mod_idiomas, utils  # noqa: E402
 from backend import thema as mod_thema  # noqa: E402
 from backend import afinidad as mod_afinidad  # noqa: E402
+from backend import cambios as mod_cambios  # noqa: E402
+from backend import series as mod_series  # noqa: E402
+from backend import marc as mod_marc  # noqa: E402
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND = os.path.join(RAIZ, "frontend")
@@ -45,16 +46,12 @@ app = FastAPI(title="Bildumargi", docs_url=None, redoc_url=None)
 if hasattr(config, "preparar_carpeta_datos"):
     config.preparar_carpeta_datos()
 
-BASE = basedatos.BaseRed(config.url_base_datos(), config.RUTA_CACHE)
-
-VALORACIONES = mod_valoraciones.Valoraciones(
-    config.RUTA_VALORACIONES, getattr(config, "VALORACIONES_ACTIVAS", True))
-
 ALMACEN = mod_almacen.Almacen(
     getattr(config, "RUTA_BIBLIOTECAS_DATOS", os.path.join(config.RAIZ, "datos", "bibliotecas")))
-PREFERENCIAS = mod_preferencias.Preferencias(ALMACEN, getattr(config, "RUTA_PREFERENCIAS", None))
-CONFIG_RED = mod_config_red.ConfiguracionRed(
-    getattr(config, "RUTA_CONFIG_RED", os.path.join(config.RAIZ, "datos", "configuracion_red.json")))
+# Una sola configuración, la de la biblioteca (datos/configuracion.json). Si
+# falta, se parte de la configuración de la red de la 1.x.
+CONFIG = mod_configuracion.Configuracion(
+    config.RUTA_CONFIGURACION, os.path.join(config.RUTA_DATOS, "configuracion_red.json"))
 
 # ---------------------------------------------------------------------------
 # Novedades de DILVE: espejo local, credenciales y tarea de fondo
@@ -115,6 +112,15 @@ class CacheCombinada:
     def sin_ficha(self):
         return self.base.sin_ficha()
 
+    def idiomas_de(self, isbns):
+        """{isbn: código de idioma} de todo lo descargado (fichas y novedades)."""
+        encontrados = self.base.idiomas_de(isbns)
+        if self.novedades is not None and self.novedades.conn:
+            faltan = [i for i in isbns if i not in encontrados]
+            if faltan:
+                encontrados.update(self.novedades.idiomas_de(faltan))
+        return encontrados
+
     def fichas(self, isbns, cliente=None, progreso=None):
         encontradas = self.leer_fichas(isbns)
         faltan = [i for i in isbns if i not in encontradas]
@@ -137,7 +143,7 @@ CUOTA_DILVE = None
 
 def cuota_dilve():
     global CUOTA_DILVE
-    conf = CONFIG_RED.leer()["dilve"]
+    conf = CONFIG.leer()["dilve"]
     if CUOTA_DILVE is None:
         CUOTA_DILVE = mod_dilve.Cuota(os.path.join(os.path.dirname(RUTA_DILVE), "cuota.json"),
                                       conf.get("max_llamadas_dia", 300), conf.get("pausa_llamadas", 6.0))
@@ -186,7 +192,7 @@ def cliente_dilve():
 def _tarea_dilve(modo):
     """Descarga inicial o actualización, en segundo plano."""
     cliente = cliente_dilve()
-    conf = CONFIG_RED.leer()["dilve"]
+    conf = CONFIG.leer()["dilve"]
     base = base_dilve()
     if cliente is None or base.error:
         TAREA_DILVE.update({"en_curso": False, "error": base.error or "Faltan las credenciales de DILVE."})
@@ -197,10 +203,11 @@ def _tarea_dilve(modo):
         avance = lambda p: TAREA_DILVE.update({"progreso": p})
         if modo == "inicial":
             resultado = mod_dilve.descargar_inicial(base, cliente,
-                                                 conf["meses_novedades"], avance, _PARAR_DILVE)
+                                                 conf["meses_novedades"], avance, _PARAR_DILVE,
+                                                 conservar=_conservar_tomos_de_series)
         else:
             resultado = mod_dilve.actualizar(base, cliente, conf["meses_novedades"],
-                                             avance, _PARAR_DILVE)
+                                             avance, _PARAR_DILVE, conservar=_conservar_tomos_de_series)
         TAREA_DILVE["ultimo"] = resultado
     except mod_dilve.ErrorDILVE as exc:
         TAREA_DILVE["error"] = str(exc)
@@ -209,6 +216,25 @@ def _tarea_dilve(modo):
         TAREA_DILVE["error"] = f"Fallo inesperado: {exc}"
     finally:
         TAREA_DILVE.update({"en_curso": False, "fase": None})
+
+
+def _conservar_tomos_de_series(base, isbns):
+    """Antes de que una novedad salga de la ventana de meses, si es un tomo
+    numerado de una serie de la que hay fichas, pasa a la caché de fichas:
+    así, con el tiempo, se van conociendo los tomos de las series aunque
+    DILVE no permita pedir una serie entera."""
+    fichas = _base_fichas()
+    try:
+        series = set(json.loads(fichas.leer("series_biblioteca") or "[]"))
+    except ValueError:
+        series = set()
+    if not series:
+        return
+    candidatas = [f for f in base.leer_fichas(isbns).values()
+                  if f.get("coleccion") in series
+                  and mod_series.numero_de(f, f.get("coleccion")) is not None]
+    if candidatas:
+        fichas.guardar(candidatas)
 
 
 def lanzar_tarea_dilve(modo):
@@ -237,7 +263,7 @@ def toca_dilve():
       se actualiza cuando toque.
     - Con base: actualización cuando hayan pasado `cada_dias` (7 por defecto).
     """
-    conf = CONFIG_RED.leer()["dilve"]
+    conf = CONFIG.leer()["dilve"]
     usuario, clave, _ = credenciales_dilve()
     if not (conf["activo"] and usuario and clave) or TAREA_DILVE["en_curso"]:
         return None
@@ -280,50 +306,171 @@ def arrancar_vigilante():
 _ADMIN = {}
 _ADMIN_DURACION = 2 * 3600
 
-DIRECTORIO = None
-ERROR_DIRECTORIO = None
-try:
-    DIRECTORIO = bibliotecas.Directorio(config.RUTA_BIBLIOTECAS)
-except bibliotecas.ErrorDirectorio as exc:
-    ERROR_DIRECTORIO = str(exc)
+# --- La biblioteca -----------------------------------------------------------
+def nombre_red():
+    """La red que se ve en la cabecera: la de Configuración o, si no se ha
+    escrito nunca, la de config.py."""
+    red = biblioteca_actual().get("red")
+    return config.NOMBRE_RED if red is None else red
 
 
-def directorio_al_dia():
-    """Vuelve a leer bibliotecas.xlsx si el administrador lo ha cambiado (una
-    clave nueva, una biblioteca más), sin reiniciar la aplicación. Si el
-    fichero nuevo tiene un error, se sigue con el que había."""
-    global DIRECTORIO, ERROR_DIRECTORIO
-    if DIRECTORIO is not None and not DIRECTORIO.cambiado():
-        return DIRECTORIO
+def biblioteca_actual():
+    return CONFIG.leer()["biblioteca"]
+
+
+def carpeta_biblioteca():
+    """Carpeta de su historial en datos/bibliotecas/. No cambia aunque se
+    cambie el nombre, para no perder las cargas guardadas."""
+    return biblioteca_actual().get("carpeta") or "biblioteca"
+
+
+def _importar_de_la_1x(sucursal):
+    """Primera carga tras pasar de la 1.x: si el antiguo directorio de la red
+    (bibliotecas.xlsx) tiene esa sucursal, se toman de él nombre, población y
+    superficie, y se sigue usando su carpeta (historial, preferencias y tabla
+    de signaturas)."""
     try:
-        DIRECTORIO, ERROR_DIRECTORIO = bibliotecas.Directorio(config.RUTA_BIBLIOTECAS), None
-    except bibliotecas.ErrorDirectorio as exc:
-        if DIRECTORIO is None:
-            ERROR_DIRECTORIO = str(exc)
-    return DIRECTORIO
+        directorio = bibliotecas.Directorio(config.RUTA_BIBLIOTECAS)
+        nombre = directorio.nombre_de_sucursal(sucursal)
+    except (bibliotecas.ErrorDirectorio, OSError, ValueError):
+        return {}
+    if not nombre:
+        return {}
+    datos = {"nombre": nombre, "poblacion": directorio.habitantes(nombre) or None,
+             "metros": directorio.metros(nombre), "carpeta": mod_almacen.slug(nombre)}
+    # Su configuración propia de la 1.x pasa a ser la configuración
+    previas = ALMACEN.leer_json(datos["carpeta"], "preferencias.json") or {}
+    cambios = {k: previas[k] for k in ("idioma", "tema", "paleta", "inicio") if previas.get(k)}
+    if previas.get("pestanas_ocultas"):
+        cambios["pestanas_ocultas"] = [p for p in previas["pestanas_ocultas"] if p in mod_configuracion.PESTANAS]
+    tabla = (ALMACEN.leer_json(datos["carpeta"], "signaturas.json") or {}).get("reglas")
+    if tabla:
+        cambios["signaturas"] = tabla
+    if cambios:
+        try:
+            CONFIG.guardar(cambios)
+        except mod_configuracion.ErrorConfiguracion:
+            pass
+    return datos
 
 
-def acceso_con_clave_disponible():
-    """El acceso con clave tiene sentido si alguna biblioteca tiene clave y
-    se guardan las cargas (es lo que se abre al entrar)."""
-    d = directorio_al_dia()
-    return bool(d and d.hay_claves and CONFIG_RED.leer()["historial"] and ALMACEN.error is None)
+def registrar_biblioteca(sucursal):
+    """La primera carga apunta la sucursal de los listados. Devuelve los datos
+    de la biblioteca y, si los listados son de otra sucursal, la apuntada."""
+    b = biblioteca_actual()
+    if b.get("sucursal") is None and sucursal is not None:
+        datos = {"sucursal": sucursal}
+        if not b.get("carpeta"):
+            importados = _importar_de_la_1x(sucursal)
+            datos.update({k: v for k, v in importados.items() if v is not None and not b.get(k)})
+        datos.setdefault("carpeta", b.get("carpeta") or "biblioteca")
+        return CONFIG.guardar_biblioteca(**datos)["biblioteca"], None
+    if not b.get("carpeta"):
+        b = CONFIG.guardar_biblioteca(carpeta="biblioteca")["biblioteca"]
+    if sucursal is not None and b.get("sucursal") is not None and str(sucursal) != str(b["sucursal"]):
+        return b, b["sucursal"]
+    return b, None
+
+
+def importar_al_arrancar():
+    """Al pasar de la 1.x: si el antiguo directorio tiene una sola biblioteca
+    con cargas guardadas, es esta. Así su último análisis se puede abrir
+    desde el primer momento, sin subir antes los listados."""
+    if biblioteca_actual().get("carpeta") or ALMACEN.error is not None:
+        return
+    try:
+        directorio = bibliotecas.Directorio(config.RUTA_BIBLIOTECAS)
+    except (bibliotecas.ErrorDirectorio, OSError, ValueError):
+        return
+    con_cargas = [(suc, nombre) for suc, nombre in directorio.por_sucursal.items()
+                  if ALMACEN.cargas(mod_almacen.slug(nombre))]
+    if len(con_cargas) == 1:
+        registrar_biblioteca(con_cargas[0][0])
+
+
+def _leer_ini(ruta):
+    """El instalador de Windows escribe un .ini (en UTF-16 o en la página de
+    códigos de Windows, según el caso)."""
+    import configparser
+    bruto = open(ruta, "rb").read()
+    for codificacion in ("utf-16", "utf-8-sig", "cp1252"):
+        if codificacion == "utf-16" and not bruto.startswith((b"\xff\xfe", b"\xfe\xff")):
+            continue
+        try:
+            texto = bruto.decode(codificacion)
+            break
+        except UnicodeDecodeError:
+            continue
+    ini = configparser.ConfigParser(interpolation=None)
+    ini.read_string(texto)
+    return ini["Bildumargi"] if ini.has_section("Bildumargi") else {}
+
+
+def aplicar_instalacion():
+    """Lo que se escribió en el instalador de Windows (datos/instalacion.ini):
+    datos de la biblioteca, cuenta de DILVE y ruta del catálogo MARC. Se
+    aplica una vez y el fichero se borra (lleva la contraseña de DILVE, que
+    pasa a datos/dilve/credenciales.json, como si se guardara en Configuración)."""
+    ruta = os.path.join(config.RUTA_DATOS, "instalacion.ini")
+    if not os.path.exists(ruta):
+        return
+    try:
+        datos = _leer_ini(ruta)
+        actual = CONFIG.leer()
+        biblioteca = {}
+        if datos.get("nombre", "").strip() and not actual["biblioteca"].get("nombre"):
+            biblioteca["nombre"] = datos["nombre"].strip()
+        if datos.get("red", "").strip() and actual["biblioteca"].get("red") is None:
+            biblioteca["red"] = datos["red"].strip()
+        for campo in ("poblacion", "metros"):
+            if datos.get(campo, "").strip() and not actual["biblioteca"].get(campo):
+                biblioteca[campo] = datos[campo].strip()
+        cambios = {"biblioteca": biblioteca} if biblioteca else {}
+        if datos.get("marc", "").strip():
+            cambios["marc"] = {"ruta": datos["marc"].strip()}
+        usuario, clave = datos.get("dilve_usuario", "").strip(), datos.get("dilve_clave", "")
+        if usuario and clave:
+            os.makedirs(os.path.dirname(RUTA_DILVE_CREDENCIALES), exist_ok=True)
+            with open(RUTA_DILVE_CREDENCIALES, "w", encoding="utf-8") as f:
+                json.dump({"usuario": usuario, "clave": clave}, f)
+            try:
+                os.chmod(RUTA_DILVE_CREDENCIALES, 0o600)
+            except OSError:
+                pass
+            cambios["dilve"] = {"activo": True}            # novedades semanales
+        if cambios:
+            CONFIG.guardar(cambios)
+    except Exception as exc:                                    # noqa: BLE001
+        print(f"No se han podido aplicar los datos de la instalación: {exc}")
+    finally:
+        try:
+            os.remove(ruta)
+        except OSError:
+            pass
+
+
+@app.on_event("startup")
+def arrancar_importacion():
+    try:
+        aplicar_instalacion()
+        importar_al_arrancar()
+    except Exception:                                            # noqa: BLE001
+        pass                                                     # se hará en la primera carga
+
+
+def _ultima_carga():
+    """La última carga guardada, si hay historial."""
+    if not CONFIG.leer()["historial"] or ALMACEN.error is not None:
+        return None
+    cargas = ALMACEN.cargas(carpeta_biblioteca())
+    return {"id": cargas[0]["id"], "fecha": cargas[0].get("fecha")} if cargas else None
 
 
 # --- Tabla de signaturas (Configuración) ------------------------------------
-def signaturas_de(biblioteca):
-    """(tabla en vigor o None, origen): la de la biblioteca si tiene, si no la
-    de la red, si no ninguna (clasificación estándar)."""
-    propia = ALMACEN.leer_json(biblioteca, "signaturas.json") if biblioteca and ALMACEN.error is None else None
-    if isinstance(propia, dict) and propia.get("reglas"):
-        try:
-            return clasificacion.normalizar_reglas(propia["reglas"]), "biblioteca"
-        except ValueError:
-            pass
-    red = CONFIG_RED.leer().get("signaturas")
-    if red:
-        return red, "red"
-    return None, "defecto"
+def signaturas_de():
+    """(tabla en vigor o None, origen): la de la biblioteca o la estándar."""
+    tabla = CONFIG.leer().get("signaturas")
+    return (tabla, "biblioteca") if tabla else (None, "defecto")
 
 
 # --- Sesiones de análisis --------------------------------------------------
@@ -331,19 +478,24 @@ class Sesion:
     def __init__(self, registros, fichas, biblioteca, huerfanos):
         self.registros = registros
         self.fichas = fichas
-        self.biblioteca = biblioteca
         self.huerfanos = huerfanos
         self.creada = time.time()
         self.tocada = time.time()
-        self.indice_fondo = analisis.construir_indice_fondo(registros, fichas)
-        self.poblacion = DIRECTORIO.habitantes(biblioteca) if DIRECTORIO else 0
-        self.superficie = DIRECTORIO.metros(biblioteca) if DIRECTORIO else None
-        # Candidatos de compra ya preparados (lo lento del panel), por
-        # combinación de años/texto/opciones. Cambiar de sección, de idioma o
-        # de fuente solo filtra esta lista en memoria.
-        self.candidatos = {}
         self.perfil_secciones = {}
-        self.candado_candidatos = threading.Lock()
+        self.topo = None             # listado topográfico, para comparar cargas
+        self.id_carga = None         # carga guardada que se está viendo, si la hay
+        self.cambios = None          # altas y bajas respecto a la carga anterior
+        self.cuenta_idiomas = {}
+        self.series = None           # series detectadas (se calculan al pedirlas)
+        self.poner_biblioteca(biblioteca)
+
+    def poner_biblioteca(self, biblioteca):
+        """Nombre, carpeta, población y superficie (cambian al guardar la
+        configuración, sin volver a subir nada)."""
+        self.biblioteca = biblioteca.get("nombre") or ""
+        self.carpeta = biblioteca.get("carpeta") or "biblioteca"
+        self.poblacion = biblioteca.get("poblacion") or 0
+        self.superficie = biblioteca.get("metros")
 
 
 SESIONES = {}
@@ -371,12 +523,11 @@ def obtener_sesion(token) -> Sesion:
 # ===========================================================================
 @app.get("/api/config")
 def api_config():
-    """Lo que la interfaz necesita saber antes de pintar nada: si hay base de
-    datos enlazada (y por tanto si se muestran las recomendaciones de compra),
-    cuántas bibliotecas hay en el directorio y cómo se llama la red."""
-    estado = BASE.estado()
+    """Lo que la interfaz necesita saber antes de pintar nada: la
+    configuración, si hay DILVE (y por tanto sugerencias de compra) y si hay
+    un análisis guardado que abrir."""
     return {
-        "nombre_red": config.NOMBRE_RED,
+        "nombre_red": nombre_red(),
         "idioma": config.IDIOMA_POR_DEFECTO,
         "anio_actual": config.ANIO_ACTUAL,
         "autoria": config.AUTORIA,
@@ -386,31 +537,22 @@ def api_config():
         # Pesos del orden por afinidad, para explicarlo en la interfaz tal como está
         "pesos_afinidad": PARAMETROS_AFINIDAD["beta"],
         "afinidad_ajustada": os.path.exists(os.path.join(getattr(config, "RUTA_DATOS", ""), "afinidad.json")),
-        "base_datos": estado,
-        "recomendaciones_activas": estado["disponible"],
         # Nombres de las lenguas en euskera («Castellano» → «Gaztelania»): la
         # interfaz los necesita para rotular idiomas cuando se usa en euskera.
         "nombres_idioma_eu": mod_idiomas.IDIOMAS_LABELS_EU,
-        "valoraciones": VALORACIONES.estado(),
-        "red": CONFIG_RED.leer(),
+        "configuracion": CONFIG.leer(),
         # Hay novedades de DILVE utilizables: módulo activo y credenciales puestas
         # Para las sugerencias basta con tener credenciales (autores) o novedades
         # ya descargadas (novedades): la casilla «activo» solo rige la descarga
         # automática semanal.
-        "dilve_activo": bool(CONFIG_RED.leer()["dilve"]["activo"] and credenciales_dilve()[0]),
+        "dilve_activo": bool(CONFIG.leer()["dilve"]["activo"] and credenciales_dilve()[0]),
         "dilve_credenciales": bool(credenciales_dilve()[0]),
         "dilve_novedades": (base_dilve().estadisticas().get("registros") or 0)
                            if os.path.exists(RUTA_DILVE) else 0,
-        "admin_disponible": clave_admin_configurada(),
-        "acceso_clave": acceso_con_clave_disponible(),
+        # Con CLAVE_ADMIN, la configuración solo se cambia con esa clave
+        "clave_configuracion": clave_admin_configurada(),
+        "ultima_carga": _ultima_carga(),
         "signaturas_defecto": clasificacion.reglas_defecto(),
-        "directorio": {
-            "cargado": DIRECTORIO is not None,
-            "bibliotecas": len(DIRECTORIO) if DIRECTORIO else 0,
-            "avisos": DIRECTORIO.avisos[:10] if DIRECTORIO else [],
-            "error": ERROR_DIRECTORIO,
-            "ruta": config.RUTA_BIBLIOTECAS,
-        },
     }
 
 
@@ -440,6 +582,95 @@ def _resumen_carga(registros, sesion, sin_no_prestados, modo_reducido):
     }
 
 
+def hay_idiomas(registros):
+    """¿Se conoce el idioma de algún ejemplar? Si no, se ocultan sus filtros."""
+    return any(r.get("idioma") not in (None, mod_idiomas.IDIOMA_SIN_DATO) for r in registros)
+
+
+def _extraer_marc_si_falta(topo, registros):
+    ruta = (CONFIG.leer().get("marc") or {}).get("ruta", "")
+    if not ruta or os.path.exists(config.RUTA_MARC_IDIOMAS) or not os.path.exists(ruta):
+        return
+    try:
+        codigos = [r["record_id"] for r in absysnet.leer_topografico(topo)] if topo else \
+            [r["record_id"] for r in registros]
+        autores = {mod_series.autor_normalizado(r.get("autor")) for r in registros if r.get("autor")}
+        mod_marc.extraer(ruta, codigos, config.RUTA_MARC_IDIOMAS, autores)
+    except (mod_marc.ErrorMarc, OSError) as exc:
+        print(f"No se ha podido extraer el idioma del catálogo MARC: {exc}")
+
+
+def asignar_idiomas(registros):
+    """Idioma de cada ejemplar. La cuenta dice también cuántos ISBN quedan
+    por pedir a DILVE (si no queda ninguno, no tiene sentido ofrecerlo)."""
+    isbns = sorted({r["isbn"] for r in registros if r.get("isbn")})
+    try:
+        cache = cache_fichas()
+        mapa = cache.idiomas_de(isbns) if isbns else {}
+        sin = cache.sin_ficha()
+    except Exception:                                           # noqa: BLE001
+        mapa, sin = {}, set()                                   # sin caché de DILVE: solo la signatura
+    marc = mod_marc.idiomas_de(config.RUTA_MARC_IDIOMAS, [r["record_id"] for r in registros])
+    cuenta = mod_idiomas.asignar_idiomas(registros, mapa, marc)
+    cuenta["por_pedir"] = sum(1 for i in isbns if mod_dilve.isbn13_valido(i) and i not in mapa and i not in sin)
+    return cuenta
+
+
+# --- Altas y bajas respecto a la carga anterior ------------------------------
+def _carga_anterior(sesion):
+    """La carga guardada justo antes de la que se ve (o la última guardada,
+    si lo que se ve aún no se ha guardado)."""
+    if ALMACEN.error is not None:
+        return None
+    cargas = ALMACEN.cargas(sesion.carpeta)
+    if sesion.id_carga:
+        cargas = [c for c in cargas if c["id"] < sesion.id_carga]
+    return cargas[0] if cargas else None
+
+
+def _topografico_de_carga(carpeta, id_carga):
+    ficheros = (ALMACEN.leer_carga(carpeta, id_carga) or {}).get("topografico") or []
+    return ficheros[0][1] if ficheros else None
+
+
+def cambios_sesion(sesion):
+    """Altas y bajas de la carga que se ve respecto a la anterior (None si
+    no hay anterior). Se calcula una vez por sesión."""
+    if sesion.cambios is None:
+        anterior = _carga_anterior(sesion)
+        topo_anterior = _topografico_de_carga(sesion.carpeta, anterior["id"]) if anterior else None
+        if anterior and topo_anterior and sesion.topo:
+            c = mod_cambios.comparar(topo_anterior, sesion.topo, signaturas_de()[0])
+            c["anterior"] = {"id": anterior["id"], "fecha": anterior.get("fecha")}
+            sesion.cambios = c
+        else:
+            sesion.cambios = {}
+    return sesion.cambios or None
+
+
+def _resumen_cambios(c):
+    return {"altas": c["altas"], "bajas": c["bajas"], "anterior": c["anterior"]} if c else None
+
+
+def _completar_cambios(carpeta, cargas):
+    """Altas y bajas de las cargas guardadas antes de que Bildumargi las
+    calculara: se calculan una vez y se apuntan en su resumen."""
+    for actual, anterior in zip(cargas, cargas[1:]):
+        if "altas" in actual:
+            continue
+        topo_actual = _topografico_de_carga(carpeta, actual["id"])
+        topo_anterior = _topografico_de_carga(carpeta, anterior["id"])
+        if not (topo_actual and topo_anterior):
+            continue
+        c = mod_cambios.comparar(topo_anterior, topo_actual)
+        datos = {"altas": c["altas"], "bajas": c["bajas"], "anterior": anterior["id"]}
+        actual.update(datos)
+        try:
+            ALMACEN.actualizar_resumen(carpeta, actual["id"], datos)
+        except OSError:
+            pass
+
+
 def _analizar_subidos(subidos):
     """Todo el análisis a partir de los ficheros. Lo usan la subida normal y
     la reapertura de una carga guardada. Devuelve (respuesta, sesion) o
@@ -448,21 +679,18 @@ def _analizar_subidos(subidos):
     if errores:
         return JSONResponse(status_code=400, content={"errores": errores, "avisos": avisos}), None
 
-    # La biblioteca no se elige a mano: se detecta por el código de sucursal
-    # que traen los propios listados, para que no puedan analizarse por error
-    # los datos de otro centro.
-    directorio = directorio_al_dia()
+    # La primera carga apunta el código de sucursal de los listados; si un día
+    # llegan los de otra sucursal, se avisa y no se mezclan en el historial.
     textos = [utils.decodificar_bytes(asignados[h])
               for h in ("topo", "nunca", "mas2") if asignados.get(h)]
     sucursal = absysnet.detectar_sucursal(*textos)
-    biblioteca = directorio.nombre_de_sucursal(sucursal)
-    if biblioteca is None:
-        detalle = (f"El código de sucursal detectado ({sucursal}) no figura en el "
-                   f"directorio de bibliotecas." if sucursal is not None else
-                   "No se ha podido leer el código de sucursal de los listados.")
-        return JSONResponse(status_code=400, content={
-            "errores": [detalle + " Revisa la columna Sucursal del fichero bibliotecas.xlsx."],
-            "avisos": avisos}), None
+    biblioteca, sucursal_apuntada = registrar_biblioteca(sucursal)
+    if sucursal_apuntada is not None:
+        avisos = list(avisos or []) + [
+            f"Estos listados son de la sucursal {sucursal}, pero Bildumargi tiene apuntada la "
+            f"{sucursal_apuntada}. Se analizan igual, pero no se guardan en el historial, para no "
+            f"mezclar dos bibliotecas. Si has cambiado de biblioteca, pulsa «Olvidar la sucursal» "
+            f"en Configuración y vuelve a cargarlos."]
 
     registros, huerfanos, fichas = absysnet.procesar_datos(
         asignados.get("topo"), asignados.get("nunca"), asignados.get("mas2"),
@@ -471,45 +699,35 @@ def _analizar_subidos(subidos):
         return JSONResponse(status_code=400, content={"errores": [huerfanos], "avisos": avisos}), None
     # Secciones del análisis según la tabla de signaturas de la biblioteca o
     # de la red (Configuración); la estándar se conserva para las compras
-    clasificacion.aplicar_reglas(registros, signaturas_de(biblioteca)[0])
+    clasificacion.aplicar_reglas(registros, signaturas_de()[0])
 
-    # Identificador del registro en la base de la red (id_sistema), cruzando
-    # por código de barras. Sirve para saber con certeza qué títulos de la red
-    # ya están en el fondo (no depende de cómo se escriban título y autor) y,
-    # si la base trae el MARC, para el idioma, que no viene en los .txt.
-    biblioteca_base = None
-    if BASE.disponible:
-        codigos = sorted({utils.clave_id(r["record_id"]) for r in registros})
-        traduccion = BASE.mapa_codbar_a_id(codigos)
-        mapa = BASE.idiomas_de(sorted({v for v in traduccion.values() if v})) if BASE.hay_idiomas else {}
-        for r in registros:
-            id_sistema = traduccion.get(utils.clave_id(r["record_id"]))
-            r["idioma"] = mapa.get(id_sistema) or mod_idiomas.IDIOMA_SIN_DATO
-            r["id_sistema"] = id_sistema
-        biblioteca_base = BASE.biblioteca_de_codigos(codigos)
-    else:
-        for r in registros:
-            r["idioma"] = mod_idiomas.IDIOMA_SIN_DATO
-            r["id_sistema"] = None
+    # El idioma no viene en los listados de AbsysNet: sale del catálogo MARC
+    # extraído, de las fichas de DILVE ya descargadas o de la signatura (sin
+    # llamar a DILVE). Si hay ruta del MARC y aún no se ha extraído (recién
+    # instalado), se extrae ahora, una vez.
+    _extraer_marc_si_falta(asignados.get("topo"), registros)
+    cuenta_idiomas = asignar_idiomas(registros)
 
     token = uuid.uuid4().hex
     with _CANDADO:
         SESIONES[token] = Sesion(registros, fichas, biblioteca, huerfanos)
     sesion = SESIONES[token]
-    # Nombre con el que figura en la base de la red (puede no ser idéntico al
-    # del directorio): es el que usan las consultas de la base
-    sesion.biblioteca_base = biblioteca_base or biblioteca
+    sesion.topo = asignados.get("topo")
+    sesion.cuenta_idiomas = cuenta_idiomas
 
     return {
         "sesion": token,
-        "biblioteca": biblioteca,
+        "biblioteca": sesion.biblioteca,
         "sucursal": sucursal,
+        "sucursal_distinta": sucursal_apuntada is not None,
+        "falta_poblacion": not sesion.poblacion,
         "avisos": avisos,
         "modo_reducido": not asignados.get("catalogo"),
         # Sin el listado de no prestados, todos los ejemplares cuentan como
         # prestados: la circulación y el uso relativo no serían reales.
         "sin_no_prestados": not asignados.get("nunca"),
-        "hay_idiomas": BASE.hay_idiomas,
+        "hay_idiomas": hay_idiomas(registros),
+        "idiomas": cuenta_idiomas,
         "metricas": analisis.metricas_cabecera(registros, sesion.poblacion, sesion.superficie),
         "filtros": analisis.opciones_filtros(registros),
     }, sesion
@@ -525,9 +743,6 @@ async def api_analizar(
     mas_prestados: UploadFile = File(None),
     idioma: str = Form("es"),
 ):
-    if DIRECTORIO is None:
-        raise HTTPException(status_code=500, detail=ERROR_DIRECTORIO or "directorio_no_cargado")
-
     async def leer(f):
         return (f.filename, await f.read()) if f is not None else None
 
@@ -544,17 +759,20 @@ async def api_analizar(
     if sesion is None:
         return respuesta
     _precargar_sugerencias(respuesta["sesion"])
-    _precargar_candidatos(respuesta["sesion"])
-    # Historial: si la red lo tiene activo, se guardan los listados de esta
-    # carga en la carpeta de la biblioteca, con sus indicadores.
-    red = CONFIG_RED.leer()
+    # Historial: si está activo, se guardan los listados de esta carga en la
+    # carpeta de la biblioteca, con sus indicadores.
+    red = CONFIG.leer()
     respuesta["carga"] = None
-    if red["historial"] and ALMACEN.error is None:
+    cambios = None if respuesta["sucursal_distinta"] else cambios_sesion(sesion)
+    respuesta["cambios"] = _resumen_cambios(cambios)
+    if red["historial"] and ALMACEN.error is None and not respuesta["sucursal_distinta"]:
+        resumen = _resumen_carga(sesion.registros, sesion, respuesta["sin_no_prestados"], respuesta["modo_reducido"])
+        if cambios:
+            resumen.update({"altas": cambios["altas"], "bajas": cambios["bajas"],
+                            "anterior": cambios["anterior"]["id"]})
         try:
-            respuesta["carga"] = ALMACEN.guardar_carga(
-                sesion.biblioteca, por_tipo,
-                _resumen_carga(sesion.registros, sesion, respuesta["sin_no_prestados"], respuesta["modo_reducido"]),
-                red["max_cargas"])
+            respuesta["carga"] = ALMACEN.guardar_carga(sesion.carpeta, por_tipo, resumen, red["max_cargas"])
+            sesion.id_carga = respuesta["carga"]
         except OSError as exc:
             respuesta["avisos"] = list(respuesta.get("avisos") or []) + [f"No se ha podido guardar esta carga: {exc}"]
     return respuesta
@@ -563,11 +781,21 @@ async def api_analizar(
 @app.get("/api/sesion/{token}/idiomas")
 def api_idiomas(token: str, ui: str = "es"):
     sesion = obtener_sesion(token)
-    if not BASE.hay_idiomas:
+    if not hay_idiomas(sesion.registros):
         return {"disponible": False}
     datos = analisis.tabla_idiomas(sesion.registros, sesion.poblacion, ui)
     datos["disponible"] = True
     return datos
+
+
+@app.get("/api/sesion/{token}/metricas")
+def api_metricas(token: str):
+    """Indicadores de cabecera de nuevo, tras cambiar población o superficie
+    en la configuración."""
+    sesion = obtener_sesion(token)
+    return {"biblioteca": sesion.biblioteca, "falta_poblacion": not sesion.poblacion,
+            "hay_idiomas": hay_idiomas(sesion.registros), "idiomas": sesion.cuenta_idiomas,
+            "metricas": analisis.metricas_cabecera(sesion.registros, sesion.poblacion, sesion.superficie)}
 
 
 @app.get("/api/sesion/{token}/buscar")
@@ -676,72 +904,14 @@ def api_ficha(token: str, record_id: int):
         "detalle_isbd": ficha.get("resto_isbd"),
         "materias": ficha.get("materias") or [],
         "idioma": fila.get("idioma"),
+        "idioma_origen": fila.get("idioma_origen"),
         "loc": fila.get("loc"),
         "prestamos": fila.get("prestamos"),
-        # Enlace con el catálogo de la red: permite valorar el propio fondo.
-        "id_sistema": fila.get("id_sistema"),
         "fuente": "sesion",
     }
 
 
-# --- Recomendaciones de compra (solo si hay base de datos) -----------------
-def _exigir_base():
-    if not BASE.disponible:
-        raise HTTPException(status_code=409, detail=BASE.error or "sin_base_de_datos")
-
-
-def _anotar_valoraciones(filas):
-    """Añade a cada fila la media y el número de valoraciones de la red."""
-    if not filas or not VALORACIONES.disponible:
-        return filas
-    resumen = VALORACIONES.resumen_de([f.get("id_sistema") for f in filas])
-    for fila in filas:
-        v = resumen.get(str(fila.get("id_sistema")))
-        fila["valoracion_media"] = v["media"] if v else None
-        fila["valoracion_n"] = v["n_puntuaciones"] if v else 0
-        fila["valoracion_comentarios"] = v["n_comentarios"] if v else 0
-    return filas
-
-
-@app.get("/api/sesion/{token}/recomendaciones/generales")
-def api_rec_generales(token: str, limite: int = 50, anio_minimo: int = 2015,
-                      idioma: str = "__TODOS__", excluir_fondo: bool = True,
-                      solo_bibliografico: bool = True):
-    _exigir_base()
-    sesion = obtener_sesion(token)
-    datos = recomendaciones.generales(
-        BASE, _nombre_en_base(sesion), sesion.indice_fondo, limite, anio_minimo,
-        None if idioma == "__TODOS__" else idioma, excluir_fondo, solo_bibliografico)
-    datos["idiomas_red"] = BASE.idiomas_disponibles()
-    _anotar_valoraciones(datos["filas"])
-    return datos
-
-
-MAX_CANDIDATOS_POR_SESION = 6      # combinaciones distintas que se recuerdan
-
-
-def _nombre_en_base(sesion):
-    return getattr(sesion, "biblioteca_base", None) or sesion.biblioteca
-
-
-def candidatos_sesion(sesion, anio_minimo, texto="", campo="titulo",
-                      excluir_fondo=True, solo_bibliografico=True):
-    """Candidatos de compra preparados para esta sesión, calculados una sola
-    vez por combinación. El candado evita que dos peticiones simultáneas (o la
-    precarga y el primer clic) hagan el mismo trabajo a la vez."""
-    clave = (int(anio_minimo), (texto or "").strip().lower(), campo, bool(excluir_fondo), bool(solo_bibliografico))
-    with sesion.candado_candidatos:
-        guardado = sesion.candidatos.get(clave)
-        if guardado is None:
-            guardado = recomendaciones.preparar_candidatos(
-                BASE, _nombre_en_base(sesion), sesion.indice_fondo, anio_minimo, texto, campo,
-                excluir_fondo, solo_bibliografico)
-            if len(sesion.candidatos) >= MAX_CANDIDATOS_POR_SESION:
-                sesion.candidatos.pop(next(iter(sesion.candidatos)))    # el más antiguo
-            sesion.candidatos[clave] = guardado
-        return guardado
-
-
+# --- Sugerencias de compra: perfil del fondo propio --------------------------
 def perfil_secciones_sesion(sesion):
     anio = config.ANIO_ACTUAL
     if anio not in sesion.perfil_secciones:
@@ -749,180 +919,31 @@ def perfil_secciones_sesion(sesion):
     return sesion.perfil_secciones[anio]
 
 
-def _precargar_candidatos(token):
-    """Prepara en segundo plano los candidatos con las opciones por defecto de
-    la pestaña (últimos 5 años, sin buscar texto), para que el primer clic en
-    «Sugerencias de compra» sea inmediato."""
-    if not (BASE and BASE.disponible):
-        return
-    try:
-        sesion = obtener_sesion(token)
-    except HTTPException:
-        return
-
-    def trabajo():
-        try:
-            candidatos_sesion(sesion, config.ANIO_ACTUAL - 4)
-            perfil_secciones_sesion(sesion)
-        except Exception:                                       # noqa: BLE001
-            pass                                                # se calculará al primer clic
-    threading.Thread(target=trabajo, daemon=True, name="precarga-candidatos").start()
-
-
-@app.get("/api/sesion/{token}/recomendaciones/panel")
-def api_rec_panel(token: str, limite: int = 200, anio_minimo: int = 2015,
-                  seccion: str = "", idioma: str = "__TODOS__",
-                  campo: str = "titulo", texto: str = "",
-                  excluir_fondo: bool = True, solo_bibliografico: bool = True):
-    _exigir_base()
+@app.get("/api/sesion/{token}/compras/panel")
+def api_compras_panel(token: str):
+    """Demanda y actualidad del fondo propio, sección a sección: con ellas el
+    panel de sugerencias señala dónde hace más falta comprar."""
     sesion = obtener_sesion(token)
-    candidatos = candidatos_sesion(sesion, anio_minimo, texto, campo, excluir_fondo, solo_bibliografico)
-    datos = recomendaciones.panel(
-        BASE, _nombre_en_base(sesion), sesion.indice_fondo, limite, anio_minimo,
-        seccion or None, idioma, texto, campo, excluir_fondo, solo_bibliografico,
-        candidatos=candidatos)
-    _anotar_valoraciones(datos["filas"])
-    datos["idiomas_red"] = BASE.idiomas_disponibles()
-    # Demanda y actualidad del fondo propio, sección a sección: el panel las
-    # cruza con la oferta de la red para señalar dónde hace más falta comprar.
-    datos["propias"] = perfil_secciones_sesion(sesion)
-    return datos
-
-
-@app.get("/api/ficha-red/{id_sistema}")
-def api_ficha_red(id_sistema: str):
-    _exigir_base()
-    ficha = BASE.ficha(id_sistema)
-    if ficha is None:
-        raise HTTPException(status_code=404, detail="registro_no_encontrado")
-    ficha["fuente_red"] = True
-    return ficha
+    return {"propias": perfil_secciones_sesion(sesion)}
 
 
 # ===========================================================================
-# Valoraciones entre bibliotecas
-# ===========================================================================
-class EntradaValoracion(BaseModel):
-    puntuacion: int | None = None
-    comentario: str | None = None
-
-
-@app.get("/api/sesion/{token}/valoraciones/{id_sistema}")
-def api_valoraciones(token: str, id_sistema: str):
-    """Valoraciones de un título y la de esta biblioteca, si la hay."""
-    sesion = obtener_sesion(token)
-    datos = VALORACIONES.de_titulo(id_sistema)
-    datos["mia"] = VALORACIONES.mia(id_sistema, sesion.biblioteca)
-    datos["biblioteca"] = sesion.biblioteca
-    datos["disponible"] = VALORACIONES.disponible
-    datos["error"] = VALORACIONES.error
-    return datos
-
-
-@app.put("/api/sesion/{token}/valoraciones/{id_sistema}")
-def api_guardar_valoracion(token: str, id_sistema: str, entrada: EntradaValoracion):
-    """La biblioteca que firma es la detectada en la sesión, no una que se
-    envíe desde el navegador: así nadie puede valorar en nombre de otra."""
-    sesion = obtener_sesion(token)
-    try:
-        datos = VALORACIONES.guardar(id_sistema, sesion.biblioteca,
-                                     entrada.puntuacion, entrada.comentario)
-    except mod_valoraciones.ErrorValoracion as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    datos["mia"] = VALORACIONES.mia(id_sistema, sesion.biblioteca)
-    datos["biblioteca"] = sesion.biblioteca
-    datos["disponible"] = True
-    return datos
-
-
-@app.delete("/api/sesion/{token}/valoraciones/{id_sistema}")
-def api_borrar_valoracion(token: str, id_sistema: str):
-    sesion = obtener_sesion(token)
-    try:
-        datos = VALORACIONES.borrar(id_sistema, sesion.biblioteca)
-    except mod_valoraciones.ErrorValoracion as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    datos["mia"] = None
-    datos["biblioteca"] = sesion.biblioteca
-    datos["disponible"] = True
-    return datos
-
-
-class EntradaRespuesta(BaseModel):
-    id_valoracion: int
-    texto: str
-
-
-def _hilo(id_sistema, sesion):
-    datos = VALORACIONES.de_titulo(id_sistema)
-    datos["mia"] = VALORACIONES.mia(id_sistema, sesion.biblioteca)
-    datos["biblioteca"] = sesion.biblioteca
-    datos["disponible"] = True
-    return datos
-
-
-@app.post("/api/sesion/{token}/respuestas")
-def api_responder(token: str, entrada: EntradaRespuesta):
-    """Responder a un comentario. Firma la biblioteca de la sesión."""
-    sesion = obtener_sesion(token)
-    try:
-        id_sistema = VALORACIONES.responder(entrada.id_valoracion, sesion.biblioteca, entrada.texto)
-    except mod_valoraciones.ErrorValoracion as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    return _hilo(id_sistema, sesion)
-
-
-@app.delete("/api/sesion/{token}/respuestas/{id_respuesta}")
-def api_borrar_respuesta(token: str, id_respuesta: int):
-    sesion = obtener_sesion(token)
-    try:
-        id_sistema = VALORACIONES.borrar_respuesta(id_respuesta, sesion.biblioteca)
-    except mod_valoraciones.ErrorValoracion as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    return _hilo(id_sistema, sesion)
-
-
-@app.get("/api/sesion/{token}/red")
-def api_red(token: str, filtro: str = "todo", limite: int = 60):
-    """Todo lo que necesita la pestaña «Red»: participación, actividad,
-    mejor valorados y más comentados, con título y autor resueltos contra el
-    catálogo de la red y marcados si están en el fondo de esta biblioteca."""
-    sesion = obtener_sesion(token)
-    desde = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat(timespec="seconds")
-    actividad = VALORACIONES.actividad(limite, sesion.biblioteca, filtro)
-    mejores = VALORACIONES.mejor_valorados()
-    comentados = VALORACIONES.mas_comentados()
-    ids = {f["id_sistema"] for f in actividad + mejores + comentados}
-    titulos = BASE.titulos_de(ids) if BASE.disponible else {}
-    propios = {r.get("id_sistema") for r in sesion.registros if r.get("id_sistema")}
-    for f in actividad + mejores + comentados:
-        info = titulos.get(utils.clave_id(f["id_sistema"])) or {}
-        f.update({"titulo": info.get("titulo"), "autor": info.get("autor"), "anio": info.get("anio"),
-                  "en_fondo": f["id_sistema"] in propios})
-    return {
-        "biblioteca": sesion.biblioteca,
-        "estadisticas": VALORACIONES.estadisticas(desde),
-        "bibliotecas_red": len(BASE.bibliotecas_en_base()) if BASE.disponible else 0,
-        "respuestas_a_mi": len(VALORACIONES.actividad(500, sesion.biblioteca, "a_mi")),
-        "actividad": actividad, "mejor_valorados": mejores, "mas_comentados": comentados,
-        "disponible": VALORACIONES.disponible, "error": VALORACIONES.error,
-    }
-
-
-# ===========================================================================
-# Administración de la red
+# Configuración. Si hay CLAVE_ADMIN (config_local.py o BILDUMARGI_CLAVE_ADMIN),
+# solo se cambia con esa clave; si no, la cambia cualquiera que use Bildumargi.
 # ===========================================================================
 class EntradaClave(BaseModel):
     clave: str
 
 
 def _exigir_admin(token):
+    if not clave_admin_configurada():
+        return
     ahora = time.time()
     for t_, caduca in list(_ADMIN.items()):
         if caduca < ahora:
             _ADMIN.pop(t_, None)
     if not token or token not in _ADMIN:
-        raise HTTPException(status_code=403, detail="Hace falta entrar con la clave de administración.")
+        raise HTTPException(status_code=403, detail="Hace falta la clave de configuración.")
 
 
 def clave_admin_configurada():
@@ -933,24 +954,38 @@ def clave_admin_configurada():
 def api_admin_entrar(entrada: EntradaClave):
     clave = getattr(config, "CLAVE_ADMIN", "")
     if not clave:
-        raise HTTPException(status_code=403, detail=(
-            "La administración está desactivada: define CLAVE_ADMIN en config.py "
-            "o la variable de entorno BILDUMARGI_CLAVE_ADMIN."))
+        raise HTTPException(status_code=403, detail="La configuración no tiene clave.")
     if not hmac.compare_digest(entrada.clave.encode("utf-8"), clave.encode("utf-8")):
         time.sleep(1)   # frena los intentos a ciegas
         raise HTTPException(status_code=403, detail="Clave incorrecta.")
     token = uuid.uuid4().hex
     _ADMIN[token] = time.time() + _ADMIN_DURACION
-    return {"token": token, "configuracion": CONFIG_RED.leer()}
+    return {"token": token, "configuracion": CONFIG.leer()}
 
 
-@app.put("/api/admin/configuracion")
-def api_admin_guardar(entrada: dict, x_admin: str = Header(None)):
+@app.put("/api/configuracion")
+def api_guardar_configuracion(entrada: dict, x_admin: str = Header(None)):
+    """Guarda la configuración y la aplica al momento a los análisis abiertos:
+    datos de la biblioteca y, si cambia, la tabla de signaturas."""
     _exigir_admin(x_admin)
+    antes = CONFIG.leer()
     try:
-        return {"configuracion": CONFIG_RED.guardar(entrada)}
-    except mod_config_red.ErrorConfiguracion as exc:
+        if (entrada.get("biblioteca") or {}).get("olvidar_sucursal"):
+            CONFIG.guardar_biblioteca(sucursal=None)
+        conf = CONFIG.guardar(entrada)
+    except mod_configuracion.ErrorConfiguracion as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    with _CANDADO:
+        sesiones = list(SESIONES.values())
+    for sesion in sesiones:
+        sesion.poner_biblioteca(conf["biblioteca"])
+        if conf.get("series_ocultas") != antes.get("series_ocultas"):
+            sesion.series = None
+        if conf["signaturas"] != antes["signaturas"]:
+            clasificacion.aplicar_reglas(sesion.registros, signaturas_de()[0])
+            sesion.perfil_secciones = {}
+            sesion.cambios = None
+    return {"configuracion": conf, "ultima_carga": _ultima_carga(), "nombre_red": nombre_red()}
 
 
 class EntradaCredenciales(BaseModel):
@@ -971,7 +1006,7 @@ def _estado_dilve():
     usuario, _clave, origen = credenciales_dilve()
     base = base_dilve()
     return {
-        "configuracion": CONFIG_RED.leer()["dilve"],
+        "configuracion": CONFIG.leer()["dilve"],
         "credenciales": {"hay": bool(usuario), "usuario": usuario, "origen": origen},
         "base": {"ruta": _ruta_legible(RUTA_DILVE), "existia_al_arrancar": DILVE_EXISTIA,
                  **base.estadisticas()},
@@ -1033,6 +1068,307 @@ def api_admin_dilve_accion(accion: str, x_admin: str = Header(None)):
 
 
 # ===========================================================================
+# Fichas de DILVE de todo el catálogo (idioma de cada ejemplar y modelo de
+# afinidad). Solo se lanza a mano, después de ver cuántas llamadas supone.
+# ===========================================================================
+TAREA_CATALOGO = {"en_curso": False, "progreso": {}, "error": None, "parada": False, "resultado": None,
+                  "tipo": None}     # «catalogo» o «series»: una sola descarga de DILVE a la vez
+_PARAR_CATALOGO = threading.Event()
+_CANDADO_CATALOGO = threading.Lock()
+
+
+def _isbns_catalogo(sesion):
+    return sorted({r["isbn"] for r in sesion.registros
+                   if r.get("isbn") and mod_dilve.isbn13_valido(r["isbn"])})
+
+
+def _pendientes_catalogo(sesion):
+    """(ISBN del catálogo, ya descargados, que DILVE no tiene, por pedir, por
+    volver a leer). Se vuelven a leer las fichas guardadas antes de que se
+    leyera el número de tomo de las series."""
+    isbns = _isbns_catalogo(sesion)
+    cache = cache_fichas()
+    tienen = set(cache.idiomas_de(isbns))
+    sin = (cache.sin_ficha() & set(isbns)) - tienen
+    releer = sorted(_base_fichas().por_releer(isbns))
+    return isbns, tienen, sin, [i for i in isbns if i not in tienen and i not in sin], releer
+
+
+def estimar_catalogo(sesion):
+    isbns, tienen, sin, pendientes, releer = _pendientes_catalogo(sesion)
+    cuota = cuota_dilve()
+    llamadas = (math.ceil(len(pendientes) / mod_dilve.MAX_POR_LLAMADA)
+                + math.ceil(len(releer) / mod_dilve.MAX_POR_LLAMADA))
+    quedan_hoy = max(0, cuota.maximo_diario - cuota.usadas_hoy())
+    if not llamadas:
+        dias = 0
+    elif llamadas <= quedan_hoy:
+        dias = 1
+    else:
+        dias = (1 if quedan_hoy else 0) + math.ceil((llamadas - quedan_hoy) / max(1, cuota.maximo_diario))
+    return {
+        "ejemplares": len(sesion.registros),
+        "sin_isbn": sum(1 for r in sesion.registros if not r.get("isbn")),
+        "isbn": len(isbns), "descargados": len(tienen), "sin_ficha": len(sin), "pendientes": len(pendientes),
+        "releer": len(releer),
+        "llamadas": llamadas, "minutos": math.ceil(llamadas * cuota.pausa / 60), "pausa": cuota.pausa,
+        "cuota": cuota.maximo_diario, "quedan_hoy": quedan_hoy, "dias": dias,
+        "credenciales": bool(credenciales_dilve()[0]), "bloqueo": bool(cuota.bloqueo()),
+    }
+
+
+def _lanzar_descarga(pendientes, releer, tipo):
+    """Arranca una descarga de fichas de DILVE en segundo plano (una a la vez)."""
+    if cliente_dilve() is None:
+        raise HTTPException(status_code=400, detail="cat_sin_credenciales")
+    if cuota_dilve().bloqueo():
+        raise HTTPException(status_code=409, detail="cat_bloqueo")
+    if not _CANDADO_CATALOGO.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="cat_en_marcha")
+    try:
+        if TAREA_CATALOGO["en_curso"]:
+            raise HTTPException(status_code=409, detail="cat_en_marcha")
+        if pendientes or releer:
+            _PARAR_CATALOGO.clear()
+            TAREA_CATALOGO.update({"en_curso": True, "tipo": tipo})
+            threading.Thread(target=_tarea_catalogo, args=(pendientes, releer, tipo), daemon=True,
+                             name=f"dilve-{tipo}").start()
+    finally:
+        _CANDADO_CATALOGO.release()
+
+
+def _actualizar_idiomas_sesiones():
+    """Con fichas nuevas: idioma de todos los análisis abiertos y, para el
+    orden por afinidad, el modelo se rehace la próxima vez que se pida."""
+    with _CANDADO:
+        sesiones = list(SESIONES.values())
+    for sesion in sesiones:
+        sesion.cuenta_idiomas = asignar_idiomas(sesion.registros)
+        sesion.series = None
+    for estado in list(SUGERENCIAS.values()):
+        estado.pop("modelo_afinidad", None)
+
+
+def _tarea_catalogo(isbns, releer=(), tipo="catalogo"):
+    """Primero las fichas que faltan; después, las que hay que volver a leer."""
+    TAREA_CATALOGO["tipo"] = tipo
+    cliente = cliente_dilve()
+    base = _base_fichas()
+    tam = mod_dilve.MAX_POR_LLAMADA
+    lotes = ([("nuevas", isbns[i: i + tam]) for i in range(0, len(isbns), tam)]
+             + [("releer", list(releer)[i: i + tam]) for i in range(0, len(releer), tam)])
+    total = len(isbns) + len(releer)
+    TAREA_CATALOGO.update({"en_curso": True, "error": None, "parada": False, "resultado": None,
+                           "progreso": {"pedidas": 0, "total": total, "llamadas": 0, "recibidas": 0}})
+    recibidas = pedidas = 0
+    try:
+        for llamada, (tipo, lote) in enumerate(lotes, start=1):
+            if _PARAR_CATALOGO.is_set():
+                TAREA_CATALOGO["parada"] = True
+                break
+            if tipo == "nuevas":
+                base.fichas(lote, cliente)
+                recibidas += len(base.idiomas_de(lote))
+            else:
+                recibidas += base.releer(lote, cliente)
+            pedidas += len(lote)
+            TAREA_CATALOGO["progreso"] = {"pedidas": pedidas, "total": total,
+                                          "llamadas": llamada, "recibidas": recibidas}
+            if cliente.interrupcion is not None:            # cuota del día, bloqueo o contraseña
+                TAREA_CATALOGO["error"] = str(cliente.interrupcion)
+                break
+        if cliente.forma_lista:
+            base.escribir("forma_lista", cliente.forma_lista)
+        TAREA_CATALOGO["resultado"] = {"recibidas": recibidas}
+    except mod_dilve.ErrorDILVE as exc:
+        TAREA_CATALOGO["error"] = str(exc)
+    except Exception as exc:                                    # noqa: BLE001
+        TAREA_CATALOGO["error"] = f"Fallo inesperado: {exc}"
+    finally:
+        TAREA_CATALOGO["en_curso"] = False
+        _actualizar_idiomas_sesiones()
+
+
+@app.get("/api/sesion/{token}/catalogo-dilve")
+def api_catalogo_dilve(token: str):
+    """Cuánto supone pedir a DILVE las fichas de todo el catálogo, y cómo va."""
+    sesion = obtener_sesion(token)
+    return {**estimar_catalogo(sesion), "tarea": TAREA_CATALOGO, "idiomas": sesion.cuenta_idiomas,
+            "hay_idiomas": hay_idiomas(sesion.registros)}
+
+
+@app.post("/api/sesion/{token}/catalogo-dilve/{accion}")
+def api_catalogo_dilve_accion(token: str, accion: str, x_admin: str = Header(None)):
+    sesion = obtener_sesion(token)
+    if accion == "parar":
+        _PARAR_CATALOGO.set()
+        return api_catalogo_dilve(token)
+    if accion != "iniciar":
+        raise HTTPException(status_code=404, detail="Acción desconocida.")
+    _exigir_admin(x_admin)
+    _, _, _, pendientes, releer = _pendientes_catalogo(sesion)
+    _lanzar_descarga(pendientes, releer, "catalogo")
+    return api_catalogo_dilve(token)
+
+
+# ===========================================================================
+# Catálogo MARC: idioma de los ejemplares, extraído una vez de un .db grande
+# ===========================================================================
+class EntradaMarc(BaseModel):
+    ruta: str
+
+
+def _estado_marc():
+    est = mod_marc.estado(config.RUTA_MARC_IDIOMAS)
+    if est and est.get("origen") and os.path.exists(est["origen"]):
+        # ¿Se ha actualizado el .db desde la extracción?
+        actual = datetime.fromtimestamp(os.path.getmtime(est["origen"]), timezone.utc).isoformat(timespec="seconds")
+        est["desactualizado"] = actual != est.get("fecha_origen")
+    elif est:
+        est["origen_no_encontrado"] = True
+    return {"extraccion": est, "ruta": (CONFIG.leer().get("marc") or {}).get("ruta", "")}
+
+
+@app.get("/api/marc")
+def api_marc():
+    return _estado_marc()
+
+
+@app.post("/api/sesion/{token}/marc/extraer")
+def api_marc_extraer(token: str, entrada: EntradaMarc, x_admin: str = Header(None)):
+    """Extrae del .db el idioma de los ejemplares de esta biblioteca (la
+    reconoce por los códigos de barras del análisis abierto) y lo aplica."""
+    _exigir_admin(x_admin)
+    sesion = obtener_sesion(token)
+    codigos = [r["record_id"] for r in absysnet.leer_topografico(sesion.topo)] if sesion.topo \
+        else [r["record_id"] for r in sesion.registros]
+    try:
+        autores = {mod_series.autor_normalizado(r.get("autor")) for r in sesion.registros if r.get("autor")}
+        mod_marc.extraer(entrada.ruta, codigos, config.RUTA_MARC_IDIOMAS, autores)
+        CONFIG.guardar({"marc": {"ruta": entrada.ruta}})
+    except mod_marc.ErrorMarc as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"No se ha podido guardar el idioma extraído: {exc}")
+    _actualizar_idiomas_sesiones()
+    return {**_estado_marc(), "idiomas": sesion.cuenta_idiomas}
+
+
+@app.delete("/api/marc")
+def api_marc_quitar(x_admin: str = Header(None)):
+    """Deja de usar el catálogo MARC (borra solo el fichero pequeño extraído)."""
+    _exigir_admin(x_admin)
+    try:
+        if os.path.exists(config.RUTA_MARC_IDIOMAS):
+            os.remove(config.RUTA_MARC_IDIOMAS)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    _actualizar_idiomas_sesiones()
+    return _estado_marc()
+
+
+# ===========================================================================
+# Series (a partir de las fichas de DILVE ya descargadas; no llama a DILVE)
+# ===========================================================================
+def series_sesion(sesion):
+    if sesion.series is None:
+        isbns = sorted({r["isbn"] for r in sesion.registros if r.get("isbn")})
+        fichas = _base_fichas()
+        novedades = base_dilve() if os.path.exists(RUTA_DILVE) else None
+        propias = fichas.colecciones_de(isbns)
+        if novedades is not None and novedades.conn:
+            for isbn, f in novedades.colecciones_de([i for i in isbns if i not in propias]).items():
+                propias[isbn] = f
+        nombres = {f["coleccion"] for f in propias.values()}
+        conocidas = fichas.colecciones(nombres)
+        if novedades is not None and novedades.conn:
+            for nombre, lista in novedades.colecciones(nombres).items():
+                conocidas.setdefault(nombre, []).extend(lista)
+        sesion.series = mod_series.detectar(sesion.registros, propias, conocidas,
+                                            CONFIG.leer().get("series_ocultas") or [])
+        # Se apuntan, para conservar sus tomos cuando salgan de las novedades
+        try:
+            fichas.escribir("series_biblioteca", json.dumps(
+                sorted({n for x in sesion.series for n in conocidas if mod_series._clave(n) == x["clave"]}),
+                ensure_ascii=False))
+        except Exception:                                       # noqa: BLE001
+            pass
+    return sesion.series
+
+
+# --- Completar las series: los tomos que la biblioteca no tiene ---------------
+DIAS_RELEER_SERIES = 30      # las fichas de los tomos propios se renuevan al mes
+
+
+def _candidatos_series(sesion):
+    """ISBN que pueden ser tomos de las series de la biblioteca y aún no
+    tienen ficha: los «del mismo autor» que dan las fichas de DILVE de los
+    tomos propios y los libros de esos autores en el catálogo de la red (si
+    se extrajo del MARC). Y los tomos propios cuya ficha tiene más de un mes,
+    para que su lista de «otras obras del autor» recoja los tomos nuevos.
+    Devuelve (por pedir, por releer, cuántos de cada vía, hay red)."""
+    lista = series_sesion(sesion)
+    fichas = _base_fichas()
+    propios_series = sorted({f["isbn"] for x in lista for f in x["filas"]
+                             if f["estado"] == "propio" and f.get("isbn")})
+    de_dilve = fichas.relacionados_de(propios_series, "22")
+    red = mod_marc.isbns_de_autores(config.RUTA_MARC_IDIOMAS, {x["autor"] for x in lista if x.get("autor")})
+    de_red = set().union(*red.values()) if red else set()
+    del_fondo = {r["isbn"] for r in sesion.registros if r.get("isbn")}
+    candidatos = sorted(i for i in (de_dilve | de_red) - del_fondo if mod_dilve.isbn13_valido(i))
+    cache = cache_fichas()
+    tienen = set(cache.idiomas_de(candidatos))
+    sin = cache.sin_ficha()
+    pendientes = [i for i in candidatos if i not in tienen and i not in sin]
+    releer = sorted(fichas.antiguas(propios_series, DIAS_RELEER_SERIES))
+    hay_red = os.path.exists(config.RUTA_MARC_IDIOMAS) and bool((mod_marc.estado(config.RUTA_MARC_IDIOMAS) or {}).get("red_libros"))
+    return pendientes, releer, {"dilve": len(de_dilve), "red": len(de_red), "series": len(lista)}, hay_red
+
+
+@app.get("/api/sesion/{token}/series/completar")
+def api_series_completar(token: str):
+    """Cuánto supone buscar los tomos que faltan, y cómo va."""
+    sesion = obtener_sesion(token)
+    pendientes, releer, vias, hay_red = _candidatos_series(sesion)
+    cuota = cuota_dilve()
+    llamadas = math.ceil(len(pendientes) / mod_dilve.MAX_POR_LLAMADA) + math.ceil(len(releer) / mod_dilve.MAX_POR_LLAMADA)
+    quedan_hoy = max(0, cuota.maximo_diario - cuota.usadas_hoy())
+    dias = 0 if not llamadas else 1 if llamadas <= quedan_hoy else \
+        (1 if quedan_hoy else 0) + math.ceil((llamadas - quedan_hoy) / max(1, cuota.maximo_diario))
+    return {"pendientes": len(pendientes), "releer": len(releer), **vias, "hay_red": hay_red,
+            "llamadas": llamadas, "minutos": math.ceil(llamadas * cuota.pausa / 60), "pausa": cuota.pausa,
+            "cuota": cuota.maximo_diario, "quedan_hoy": quedan_hoy, "dias": dias,
+            "credenciales": bool(credenciales_dilve()[0]), "bloqueo": bool(cuota.bloqueo()),
+            "tarea": TAREA_CATALOGO}
+
+
+@app.post("/api/sesion/{token}/series/completar/{accion}")
+def api_series_completar_accion(token: str, accion: str, x_admin: str = Header(None)):
+    sesion = obtener_sesion(token)
+    if accion == "parar":
+        _PARAR_CATALOGO.set()
+        return api_series_completar(token)
+    if accion != "iniciar":
+        raise HTTPException(status_code=404, detail="Acción desconocida.")
+    _exigir_admin(x_admin)
+    pendientes, releer, _, _ = _candidatos_series(sesion)
+    _lanzar_descarga(pendientes, releer, "series")
+    return api_series_completar(token)
+
+
+@app.get("/api/sesion/{token}/series")
+def api_series(token: str):
+    """Series de la biblioteca, cada una con sus tomos (propios, que faltan y
+    posiblemente propios) y lo que hay que saber para fiarse del resultado:
+    cuántas fichas faltan por descargar o por volver a leer."""
+    sesion = obtener_sesion(token)
+    _, _, _, pendientes, releer = _pendientes_catalogo(sesion)
+    return {"series": series_sesion(sesion), "ocultas": CONFIG.leer().get("series_ocultas") or [],
+            "fichas_pendientes": len(pendientes), "fichas_releer": len(releer),
+            "credenciales": bool(credenciales_dilve()[0])}
+
+
+# ===========================================================================
 # Sugerencias de compra con DILVE
 # ===========================================================================
 SUGERENCIAS = {}          # token de sesión -> {estado, resultado} de «autores»
@@ -1055,7 +1391,7 @@ def _calibracion(sesion, fichas_propias):
 
 
 def _opciones_sugerencias(sesion, calibracion=None, perfil=None, filtros=None):
-    red = CONFIG_RED.leer()
+    red = CONFIG.leer()
     s, d = red["sugerencias"], red["dilve"]
     return {
         # Sin filtro de idioma de red: se descarga y se propone todo, y cada
@@ -1073,15 +1409,18 @@ def _opciones_sugerencias(sesion, calibracion=None, perfil=None, filtros=None):
 def _huella_nucleo(sesion, opciones):
     """Identifica el núcleo de préstamo: si no ha cambiado, el resultado
     guardado sigue valiendo y no hace falta volver a calcular nada."""
-    nucleo = mod_sugerencias.nucleo_prestamo(sesion.registros, opciones["fraccion_nucleo"])
-    isbns = sorted(t["isbn"] for t in nucleo if t.get("isbn"))
-    return hashlib.sha1(("|".join(isbns)).encode("utf-8")).hexdigest()[:16], len(nucleo)
+    # Los libros de los autores del núcleo (con sus préstamos): si cambian,
+    # el resultado guardado ya no vale
+    nucleo = mod_sugerencias.nucleo_autores(sesion.registros, opciones["fraccion_nucleo"])
+    firma = sorted(f"{clave}:{a['prestamos']}:{a['prestados']}:{a['ejemplares']}" for clave, a in nucleo)
+    firma += sorted(isbn for isbn, _ in mod_sugerencias.semillas_autores(nucleo))
+    return hashlib.sha1(("autores|" + "|".join(firma)).encode("utf-8")).hexdigest()[:16], len(nucleo)
 
 
 def _autores_guardados(sesion, huella):
     """Resultado de una sesión anterior de esta misma biblioteca, si el núcleo
     de préstamo no ha cambiado."""
-    guardado = ALMACEN.leer_json(sesion.biblioteca, "sugerencias_autores.json")
+    guardado = ALMACEN.leer_json(sesion.carpeta, "sugerencias_autores.json")
     if guardado and guardado.get("huella") == huella:
         # Si quedaban fichas por pedir (tope por cálculo, cuota diaria o un
         # bloqueo), se recalcula para completarlas: lo ya descargado no se
@@ -1094,7 +1433,7 @@ def _autores_guardados(sesion, huella):
 
 def _guardar_autores(sesion, datos):
     try:
-        ALMACEN.escribir_json(sesion.biblioteca, "sugerencias_autores.json", datos)
+        ALMACEN.escribir_json(sesion.carpeta, "sugerencias_autores.json", datos)
     except OSError:
         pass          # sin permisos de escritura se recalcula la próxima vez
 
@@ -1153,7 +1492,7 @@ def _precargar_sugerencias(token):
     Descarga en segundo plano las fichas que falten (las de los títulos más
     prestados y las de sus obras relacionadas) y guarda el resultado, de modo
     que al abrir la pestaña no haya que esperar ni pedir nada a DILVE."""
-    conf = CONFIG_RED.leer()
+    conf = CONFIG.leer()
     if not conf["sugerencias"].get("autores", True) or cliente_dilve() is None:
         return
     estado = SUGERENCIAS.setdefault(token, {})
@@ -1268,7 +1607,7 @@ def api_sugerencias_novedades(token: str, seccion: str = None, idioma: str = Non
     datos["hay_perfil"] = bool(modelo) if personalizadas else bool(estado.get("perfil"))
     if modelo:
         datos["cobertura_modelo"] = modelo["cobertura"]
-    datos["ventana_meses"] = CONFIG_RED.leer()["dilve"]["meses_novedades"]
+    datos["ventana_meses"] = CONFIG.leer()["dilve"]["meses_novedades"]
     return datos
 
 
@@ -1282,59 +1621,24 @@ def api_thema(ui: str = "es"):
 
 
 # ===========================================================================
-# Acceso con clave: abrir el último análisis guardado sin subir ficheros
+# Abrir el último análisis guardado sin volver a subir los ficheros
 # ===========================================================================
-class EntradaAcceso(BaseModel):
-    biblioteca: str
-    clave: str
-
-
-# Intentos fallidos por (IP, biblioteca escrita): tras 5 en 10 minutos, espera
-_FALLOS_ACCESO = {}
-_MAX_FALLOS, _VENTANA_FALLOS = 5, 600
-
-
-@app.post("/api/entrar")
-def api_entrar(entrada: EntradaAcceso, request: Request):
-    """La biblioteca escribe su nombre y la clave que le ha dado el
-    administrador (columna Clave de bibliotecas.xlsx) y se abre su última
-    carga guardada, como si acabara de subir los ficheros."""
-    directorio = directorio_al_dia()
-    if directorio is None:
-        raise HTTPException(status_code=500, detail=ERROR_DIRECTORIO or "directorio_no_cargado")
-    if not acceso_con_clave_disponible():
-        raise HTTPException(status_code=404, detail="acceso_inactivo")
-    ip = request.client.host if request.client else "?"
-    llave = (ip, bibliotecas.nucleo_nombre(entrada.biblioteca))
-    ahora = time.time()
-    fallos = [t for t in _FALLOS_ACCESO.get(llave, []) if ahora - t < _VENTANA_FALLOS]
-    if len(fallos) >= _MAX_FALLOS:
-        raise HTTPException(status_code=429, detail="acceso_intentos")
-    nombre = directorio.buscar(entrada.biblioteca)
-    esperada = directorio.clave_de(nombre) if nombre else None
-    if not (esperada and hmac.compare_digest(entrada.clave.strip().encode("utf-8"), esperada.encode("utf-8"))):
-        _FALLOS_ACCESO[llave] = fallos + [ahora]
-        time.sleep(0.5)                     # frena los intentos en bucle
-        # Mismo mensaje en los dos casos: no se revela qué bibliotecas existen.
-        # Los detalles son claves de texto: la interfaz los traduce.
-        raise HTTPException(status_code=403, detail="acceso_incorrecto")
-    _FALLOS_ACCESO.pop(llave, None)
-    cargas = ALMACEN.cargas(nombre)
-    if not cargas:
+@app.post("/api/abrir-ultima")
+def api_abrir_ultima():
+    ultima = _ultima_carga()
+    if not ultima:
         raise HTTPException(status_code=404, detail="acceso_sin_carga")
-    ultima = cargas[0]
-    por_tipo = ALMACEN.leer_carga(nombre, ultima["id"])
+    por_tipo = ALMACEN.leer_carga(carpeta_biblioteca(), ultima["id"])
     if not por_tipo:
         raise HTTPException(status_code=404, detail="acceso_carga_ilegible")
     respuesta, sesion = _analizar_subidos(_a_subidos(por_tipo))
     if sesion is None:
         return respuesta
-    if sesion.biblioteca != nombre:          # los listados guardados son de otro centro
-        raise HTTPException(status_code=409, detail="acceso_carga_ajena")
+    sesion.id_carga = ultima["id"]
     respuesta["carga"] = ultima["id"]
     respuesta["fecha_carga"] = ultima.get("fecha")
+    respuesta["cambios"] = _resumen_cambios(cambios_sesion(sesion))
     _precargar_sugerencias(respuesta["sesion"])
-    _precargar_candidatos(respuesta["sesion"])
     return respuesta
 
 
@@ -1344,9 +1648,18 @@ def api_entrar(entrada: EntradaAcceso, request: Request):
 @app.get("/api/sesion/{token}/historial")
 def api_historial(token: str):
     sesion = obtener_sesion(token)
-    red = CONFIG_RED.leer()
+    red = CONFIG.leer()
+    cargas = ALMACEN.cargas(sesion.carpeta)
+    _completar_cambios(sesion.carpeta, cargas)
     return {"activo": red["historial"], "max_cargas": red["max_cargas"],
-            "cargas": ALMACEN.cargas(sesion.biblioteca), "error": ALMACEN.error}
+            "cargas": cargas, "error": ALMACEN.error}
+
+
+@app.get("/api/sesion/{token}/cambios")
+def api_cambios(token: str):
+    """Altas y bajas, ejemplar a ejemplar, respecto a la carga anterior."""
+    sesion = obtener_sesion(token)
+    return cambios_sesion(sesion) or {"anterior": None}
 
 
 @app.post("/api/sesion/{token}/historial/{id_carga}/abrir")
@@ -1354,79 +1667,25 @@ def api_abrir_carga(token: str, id_carga: str):
     """Vuelve a analizar una carga guardada, sin subir de nuevo los ficheros.
     Solo las de la propia biblioteca: la carpeta sale de la sesión."""
     sesion = obtener_sesion(token)
-    por_tipo = ALMACEN.leer_carga(sesion.biblioteca, id_carga)
+    por_tipo = ALMACEN.leer_carga(sesion.carpeta, id_carga)
     if not por_tipo:
         raise HTTPException(status_code=404, detail="No se encuentra esa carga.")
     respuesta, nueva = _analizar_subidos(_a_subidos(por_tipo))
     if nueva is None:
         return respuesta
+    nueva.id_carga = id_carga
     respuesta["carga"] = id_carga
+    respuesta["cambios"] = _resumen_cambios(cambios_sesion(nueva))
     _precargar_sugerencias(respuesta["sesion"])
-    _precargar_candidatos(respuesta["sesion"])
     return respuesta
 
 
 @app.delete("/api/sesion/{token}/historial/{id_carga}")
 def api_borrar_carga(token: str, id_carga: str):
     sesion = obtener_sesion(token)
-    if not ALMACEN.borrar_carga(sesion.biblioteca, id_carga):
+    if not ALMACEN.borrar_carga(sesion.carpeta, id_carga):
         raise HTTPException(status_code=404, detail="No se encuentra esa carga.")
-    return {"cargas": ALMACEN.cargas(sesion.biblioteca)}
-
-
-# ===========================================================================
-# Preferencias de la biblioteca
-# ===========================================================================
-class EntradaSignaturas(BaseModel):
-    reglas: Optional[list] = None   # None = volver a la tabla de la red o la estándar
-
-
-@app.get("/api/sesion/{token}/signaturas")
-def api_signaturas(token: str):
-    sesion = obtener_sesion(token)
-    reglas, origen = signaturas_de(sesion.biblioteca)
-    return {"reglas": reglas or clasificacion.reglas_defecto(), "origen": origen,
-            "red": CONFIG_RED.leer().get("signaturas"), "guardables": ALMACEN.error is None}
-
-
-@app.put("/api/sesion/{token}/signaturas")
-def api_guardar_signaturas(token: str, entrada: EntradaSignaturas):
-    """Guarda la tabla de la biblioteca y reclasifica al momento el fondo de
-    la sesión, para que los gráficos la reflejen sin volver a subir nada."""
-    sesion = obtener_sesion(token)
-    if ALMACEN.error is not None:
-        raise HTTPException(status_code=503, detail=ALMACEN.error)
-    try:
-        reglas = clasificacion.normalizar_reglas(entrada.reglas)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    # Igual que la de la red (o la estándar): no hace falta guardar una copia
-    red = CONFIG_RED.leer().get("signaturas") or clasificacion.reglas_defecto()
-    if reglas is not None and reglas == clasificacion.normalizar_reglas(red):
-        reglas = None
-    ALMACEN.escribir_json(sesion.biblioteca, "signaturas.json", {"reglas": reglas})
-    en_vigor, origen = signaturas_de(sesion.biblioteca)
-    clasificacion.aplicar_reglas(sesion.registros, en_vigor)
-    return {"reglas": en_vigor or clasificacion.reglas_defecto(), "origen": origen,
-            "secciones": len({r["categoria"] for r in sesion.registros})}
-
-
-@app.get("/api/sesion/{token}/preferencias")
-def api_preferencias(token: str):
-    sesion = obtener_sesion(token)
-    return {"biblioteca": sesion.biblioteca, "preferencias": PREFERENCIAS.de(sesion.biblioteca),
-            "guardables": PREFERENCIAS.error is None, "error": PREFERENCIAS.error}
-
-
-@app.put("/api/sesion/{token}/preferencias")
-def api_guardar_preferencias(token: str, entrada: dict):
-    """Firma la biblioteca de la sesión: nadie cambia la configuración de otra."""
-    sesion = obtener_sesion(token)
-    try:
-        prefs = PREFERENCIAS.guardar(sesion.biblioteca, entrada)
-    except mod_preferencias.ErrorPreferencias as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    return {"biblioteca": sesion.biblioteca, "preferencias": prefs, "guardables": True, "error": None}
+    return {"cargas": ALMACEN.cargas(sesion.carpeta)}
 
 
 @app.delete("/api/sesion/{token}")

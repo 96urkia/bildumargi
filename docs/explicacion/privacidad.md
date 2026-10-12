@@ -8,20 +8,24 @@ no. **No contienen datos de lectores.**
 
 ## Dónde se guardan
 
-- **En un ordenador**: todo se queda en ese ordenador.
-- **En un servidor de la red**: en el servidor. Nada sale de él, salvo las
-  consultas a DILVE si se activan (que solo envían ISBN).
+Todo se queda en el ordenador (o en el servidor) donde está instalado
+Bildumargi. Solo se conecta fuera para:
+
+- **DILVE**, si se activa: se envían ISBN para recibir sus fichas.
+- **Las portadas** de los libros, que se piden a las direcciones que da DILVE.
+- **Los enlaces** que tú pulsas (Todos tus libros, el buscador de Thema), que
+  se abren en el navegador.
 
 ## Qué se conserva
 
-- **Historial de cargas**: solo si la red lo activa. Se conservan las últimas
-  N cargas y cada biblioteca puede borrar las suyas.
-- **Valoraciones**: se firman con el nombre de la biblioteca. Las normas de uso
-  prohíben escribir datos personales.
+- **Historial de cargas**: si está activado, se conservan las últimas N
+  cargas, que se pueden borrar desde [Seguimiento](../uso/seguimiento.md).
+- **Cuenta de DILVE**: si se escribe en Configuración o en el instalador, se
+  guarda en `dilve/credenciales.json`, en la carpeta de datos. Trata las
+  copias de esa carpeta como algo privado.
 
 ## Seguridad
 
-- Bildumargi está pensado para una **intranet de confianza**, no para
-  publicarse en internet.
-- Las **claves de acceso** de las bibliotecas se guardan sin cifrar en el
-  directorio: son una barrera sencilla. El directorio no debe compartirse.
+- En una instalación compartida (un servidor), Bildumargi está pensado para
+  una **intranet de confianza**, no para publicarse en internet. Conviene
+  poner una [clave de configuración](../administracion/ajustes-avanzados.md#clave-de-configuracion).

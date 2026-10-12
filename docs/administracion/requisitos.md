@@ -1,27 +1,29 @@
 # Requisitos y modos de uso
 
-## Dos modos de uso
+Bildumargi 2.0 está pensado para que **cada biblioteca** lo instale y lo use
+por su cuenta, con sus datos, su configuración y su cuenta de DILVE.
 
-| | **En un ordenador** | **En un servidor de la red** |
-|---|---|---|
-| Para | Una biblioteca que lo usa sola | Todas las bibliotecas de la red |
-| Acceso | Desde ese ordenador | Desde el navegador, por la intranet |
-| Valoraciones entre bibliotecas | No (se quedan en ese equipo) | Sí |
-| Historial y acceso con clave | Sí, para esa biblioteca | Sí, para todas |
-| Instalación | Zip (Windows, Linux, macOS) | Paquete `.deb` o zip |
+## Modos de uso
+
+| | **Instalador de Windows** | **Con Python (zip)** | **Servidor Linux (.deb)** |
+|---|---|---|---|
+| Para | Lo habitual: un ordenador de la biblioteca | Linux, macOS, o Windows con Python | Varios ordenadores de la biblioteca a la vez |
+| Instalación | Doble clic, sin permisos de administrador | Python 3.10+ y `pip` | `apt`, como servicio |
+| Se abre | En su propia ventana, desde el escritorio | En el navegador | En el navegador, desde la intranet |
+| Guía | [Instalar en Windows](instalar-windows.md) | [Instalar con Python](instalar-ordenador.md) | [Instalar en un servidor Linux](instalar-servidor.md) |
 
 Bildumargi **no necesita estar publicado en internet** ni salida a internet
-para analizar la colección. Solo se conecta fuera si se activa DILVE.
+para analizar la colección. Solo se conecta fuera para DILVE, y para las
+portadas de los libros.
 
 ## Requisitos
 
-- **Ordenador**: Python 3.10 o superior. El zip incluye todo lo demás.
-- **Servidor**: Debian 12, Debian 13 o Ubuntu 24.04 para el paquete `.deb`.
-  Cualquier otro sistema con Python 3.10+ sirve con el zip.
-- **Navegador**: Edge, Chrome o Firefox actuales.
-- **Recursos**: un servidor modesto basta. El catálogo colectivo puede ocupar
-  de cientos de megas a unos pocos gigas según su tamaño (ver
-  [Catálogo colectivo de la red](catalogo-red.md)).
+- **Windows**: Windows 10 u 11 de 64 bits. El instalador trae todo lo
+  necesario; la ventana usa WebView2, el motor de Edge que ya trae Windows.
+- **Con Python**: Python 3.10 o superior.
+- **Servidor**: Debian 12, Debian 13 o Ubuntu 24.04.
+- **Espacio**: unos 100 MB para el programa; los datos ocupan de decenas a
+  algunos cientos de MB según el fondo y lo descargado de DILVE.
 
 ## Una demo sin instalar nada
 

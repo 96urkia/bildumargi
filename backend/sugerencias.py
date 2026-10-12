@@ -5,10 +5,12 @@ Dos fuentes, además de la que ya existía (títulos que tiene la red y esta
 biblioteca no):
 
   Autores más prestados
-      Del listado «Más prestados» se toma el núcleo de cada sección: los
-      títulos que suman la mitad de los préstamos de esa sección (criterio de
-      Bradford, el mismo que se usa en bibliometría para el núcleo de
-      revistas). Se piden sus fichas a DILVE por ISBN y se leen sus productos
+      Se cuenta por AUTOR, con todos sus libros: títulos y ejemplares en el
+      fondo, ejemplares que han salido, préstamos (los del listado «Más
+      prestados») y uso relativo. El núcleo es el de autores que suman la
+      mitad de los préstamos de cada sección (criterio de Bradford, el mismo
+      que se usa en bibliometría para el núcleo de revistas). De TODOS los
+      libros propios de esos autores se leen en DILVE sus productos
       relacionados «del mismo autor» (ONIX, lista 51, código 22). Se comprueba
       que el autor coincide de verdad, porque algunas editoriales usan ese
       código para anunciar su catálogo: lo que no coincide se marca como
@@ -35,6 +37,8 @@ import unicodedata
 from backend import materias as mod_materias
 
 RELACIONADOS_POR_TITULO = 20        # tope por título: hay autorías con cientos
+RELACIONADOS_POR_AUTOR = 60         # y por autor, sumando todos sus libros
+SEMILLAS_POR_AUTOR = 25             # libros propios de cada autor que se miran en DILVE
 # Fichas NUEVAS que se piden a DILVE en cada cálculo (el resto ya está guardado).
 # Cinco llamadas como mucho: lo que no quepa se pide en cálculos posteriores,
 # empezando siempre por las obras de los títulos más prestados.
@@ -225,6 +229,107 @@ def nucleo_prestamo(registros, fraccion=0.5, minimo_por_seccion=MINIMO_POR_SECCI
 
 
 # ---------------------------------------------------------------------------
+# Autores: todos sus libros juntos
+# ---------------------------------------------------------------------------
+def clave_autor(nombre):
+    """«SANTIAGO, Roberto (1968-)» → «santiago roberto»: el mismo autor escrito
+    de formas distintas."""
+    return normaliza(nombre)
+
+
+def autores_del_fondo(registros):
+    """Por autor: títulos, ejemplares, ejemplares prestados, préstamos (los
+    del listado «Más prestados»), uso relativo (su parte de los ejemplares
+    prestados entre su parte del fondo, como el de las secciones) y sus
+    libros con ISBN, del más al menos prestado."""
+    total = prestados_total = 0
+    autores = {}
+    for r in registros:
+        if r.get("es_audiovisual") or "DVD" in str(r.get("categoria_estandar") or r.get("categoria") or ""):
+            continue                                   # las películas no se cruzan con DILVE
+        total += 1
+        prestados_total += 1 if r.get("prestado") else 0
+        nombre = (r.get("autor") or "").strip()
+        clave = clave_autor(nombre)
+        if not clave or es_autor_corporativo(nombre):
+            continue
+        a = autores.setdefault(clave, {"autor": nombre, "titulos": set(), "ejemplares": 0, "prestados": 0,
+                                       "prestamos": 0, "secciones": collections.Counter(), "libros": {}})
+        veces = r.get("n_prestamos") or (1 if r.get("prestamos") == 2 else 0)
+        a["titulos"].add(normaliza(r.get("titulo"))[:40])
+        a["ejemplares"] += 1
+        a["prestados"] += 1 if r.get("prestado") else 0
+        a["prestamos"] += veces
+        a["secciones"][r.get("categoria_estandar") or r.get("categoria")] += 1
+        isbn = isbn13(r.get("isbn"))
+        if isbn:
+            libro = a["libros"].setdefault(isbn, {"isbn": isbn, "titulo": r.get("titulo"), "prestamos": 0})
+            libro["prestamos"] += veces
+    tasa_fondo = prestados_total / total if total else 0
+    for a in autores.values():
+        a["titulos"] = len(a["titulos"])
+        a["seccion"] = a["secciones"].most_common(1)[0][0]
+        del a["secciones"]
+        a["uso"] = round((a["prestados"] / a["ejemplares"]) / tasa_fondo, 2) if tasa_fondo and a["ejemplares"] else None
+        a["libros"] = sorted(a["libros"].values(), key=lambda l: (-l["prestamos"], l["titulo"] or ""))
+        a["mas_prestado"] = a["libros"][0] if a["libros"] and a["libros"][0]["prestamos"] else None
+    return autores
+
+
+def nucleo_autores(registros, fraccion=0.5, minimo_por_seccion=MINIMO_POR_SECCION):
+    """Por sección (la de la mayoría de sus libros), los autores que suman
+    `fraccion` de los préstamos, contando todos sus libros juntos."""
+    autores = autores_del_fondo(registros)
+    por_seccion = collections.defaultdict(list)
+    for clave, a in autores.items():
+        if a["prestamos"] > 0:
+            por_seccion[a["seccion"]].append((clave, a))
+    nucleo = []
+    for lista in por_seccion.values():
+        lista.sort(key=lambda x: (-x[1]["prestamos"], -x[1]["prestados"], x[0]))
+        objetivo = sum(a["prestamos"] for _, a in lista) * fraccion
+        acumulado, corte = 0, 0
+        for i, (_, a) in enumerate(lista):
+            acumulado += a["prestamos"]
+            corte = i
+            if acumulado >= objetivo:
+                break
+        umbral = lista[corte][1]["prestamos"]
+        dentro = [x for x in lista if x[1]["prestamos"] >= umbral]
+        if len(dentro) < minimo_por_seccion:
+            dentro = lista[:minimo_por_seccion]
+        nucleo.extend(dentro)
+    nucleo.sort(key=lambda x: -x[1]["prestamos"])
+    return nucleo
+
+
+def semillas_autores(nucleo):
+    """Libros propios con ISBN de los autores del núcleo, por orden de interés."""
+    semillas = []
+    for clave, a in nucleo:
+        semillas += [(l["isbn"], clave) for l in a["libros"][:SEMILLAS_POR_AUTOR]]
+    return semillas
+
+
+def _resumen_autor(a):
+    mas = a.get("mas_prestado") or {}
+    return {"autor_origen": a["autor"], "autor_titulos": a["titulos"], "autor_ejemplares": a["ejemplares"],
+            "autor_prestados": a["prestados"], "autor_prestamos": a["prestamos"], "autor_uso": a["uso"],
+            "origen_titulo": mas.get("titulo"), "origen_isbn": mas.get("isbn"),
+            "origen_prestamos": mas.get("prestamos") or 0,
+            # Compatibilidad con los resultados guardados por versiones anteriores
+            "prestamos_origen": a["prestamos"]}
+
+
+def _puntos_autor(a):
+    """Préstamos del autor, corregidos por la parte de sus ejemplares que sale:
+    un autor del que casi todo se presta sube; uno del que la mayor parte se
+    queda en la estantería, baja."""
+    circulacion = a["prestados"] / a["ejemplares"] if a["ejemplares"] else 0
+    return a["prestamos"] * (0.5 + circulacion)
+
+
+# ---------------------------------------------------------------------------
 # Perfil de la biblioteca (para ordenar las novedades por parecido)
 # ---------------------------------------------------------------------------
 def perfil(fichas_nucleo, nucleo):
@@ -297,12 +402,15 @@ def muestra_estratificada(registros):
 # Fuente: autores más prestados
 # ---------------------------------------------------------------------------
 def autores_mas_prestados(cache, cliente, registros, opciones, progreso=None):
-    """Obras del mismo autor que los títulos más prestados y que no están aquí."""
-    nucleo = nucleo_prestamo(registros, opciones.get("fraccion_nucleo", 0.5))
+    """Obras de los autores más prestados (todos sus libros juntos) que no
+    están aquí."""
+    nucleo = nucleo_autores(registros, opciones.get("fraccion_nucleo", 0.5))
+    autores = dict(nucleo)
     propios_isbn = {isbn13(r.get("isbn")) for r in registros if isbn13(r.get("isbn"))}
     propios_clave = {(apellido(r.get("autor")), normaliza(r.get("titulo"))[:40])
                      for r in registros if r.get("titulo")}
-    prestamos_de = {t["isbn"]: t["prestamos"] for t in nucleo if t.get("isbn")}
+    semillas = semillas_autores(nucleo)
+    autor_de_semilla = dict(semillas)
 
     maximo = opciones.get("max_fichas_nuevas", MAX_FICHAS_NUEVAS)
     pedidas = 0
@@ -321,24 +429,31 @@ def autores_mas_prestados(cache, cliente, registros, opciones, progreso=None):
             pedidas += len(admitidas)
         return guardadas, len(faltan) - len(admitidas)
 
-    # Núcleo ordenado por préstamos: si hay que cortar, se corta por lo menos prestado
-    isbns_nucleo = [t["isbn"] for t in nucleo if t.get("isbn")]
+    # Libros propios de los autores del núcleo, de los autores más prestados
+    # a los menos: si hay que cortar, se corta por lo menos prestado
+    isbns_nucleo = [isbn for isbn, _ in semillas]
     en_cache = len(cache.leer_fichas(isbns_nucleo))
     fichas_nucleo, pendientes_nucleo = pedir_con_tope(isbns_nucleo)
 
-    origen, corporativos = collections.defaultdict(list), 0
+    # origen[relacionado] = autores del núcleo de los que sale
+    origen, corporativos, por_autor_rel = collections.defaultdict(list), 0, collections.Counter()
     for isbn, ficha in fichas_nucleo.items():
         if es_autor_corporativo(autor_de(ficha)):
             corporativos += 1
             continue
+        clave = autor_de_semilla.get(isbn)
         mismos = [r["isbn"] for r in ficha.get("relacionados") or [] if r.get("codigo") == "22"]
         for rel in mismos[:RELACIONADOS_POR_TITULO]:
             rel = isbn13(rel)
-            if rel and rel not in propios_isbn:
-                origen[rel].append(isbn)
+            if not rel or rel in propios_isbn or clave in origen[rel]:
+                continue
+            if por_autor_rel[clave] >= RELACIONADOS_POR_AUTOR:
+                break
+            origen[rel].append(clave)
+            por_autor_rel[clave] += 1
 
-    # Relacionados por orden de interés: los que salen de los títulos más prestados
-    orden_rel = sorted(origen, key=lambda i: -sum(prestamos_de.get(o, 0) for o in origen[i]))
+    # Relacionados por orden de interés: los de los autores más prestados
+    orden_rel = sorted(origen, key=lambda i: -max(_puntos_autor(autores[o]) for o in origen[i]))
     en_cache += len(cache.leer_fichas(orden_rel))
     fichas_rel, pendientes_rel = pedir_con_tope(orden_rel)
     anio_corte = opciones.get("anio_actual", 2026) - opciones.get("anios_recientes", 5) + 1
@@ -356,20 +471,18 @@ def autores_mas_prestados(cache, cliente, registros, opciones, progreso=None):
         autor = autor_de(ficha)
         # ¿Es de verdad del mismo autor? Hay editoriales que usan el código 22
         # para anunciar su catálogo.
-        coinciden = [o for o in origen[isbn] if apellido(autor_de(fichas_nucleo[o])) == apellido(autor)]
+        coinciden = [o for o in origen[isbn] if apellido(autores[o]["autor"]) == apellido(autor)]
         del_autor = bool(coinciden)
         if not del_autor and not opciones.get("sugeridos_editorial", False):
             descartes["sugerido por la editorial"] += 1
             continue
         fuentes = coinciden or origen[isbn]
-        referencia = fichas_nucleo[fuentes[0]]
-        prestamos = sum(prestamos_de.get(o, 0) for o in fuentes)
+        a = max((autores[o] for o in fuentes), key=_puntos_autor)
         anio = int((ficha.get("fecha_publicacion") or "0")[:4] or 0)
         candidatos.append(ficha_a_propuesta(ficha, opciones, {
             "del_autor": del_autor, "reciente": anio >= anio_corte, "anio": anio,
-            "origen_titulo": referencia.get("titulo"), "origen_isbn": referencia.get("isbn"),
-            "prestamos_origen": prestamos,
-            "puntos": prestamos + (20 if anio >= anio_corte else 0) + (10 if del_autor else 0),
+            **_resumen_autor(a),
+            "puntos": round(_puntos_autor(a) + (20 if anio >= anio_corte else 0) + (10 if del_autor else 0), 1),
         }))
 
     # Con lo que quede del tope, fichas de títulos PROPIOS de todo tipo
@@ -384,7 +497,14 @@ def autores_mas_prestados(cache, cliente, registros, opciones, progreso=None):
 
     candidatos.sort(key=lambda p: (-p["puntos"], -(p["anio"] or 0)))
     tope, por_autor, propuestas, anteriores = opciones.get("max_por_autor", 3), collections.Counter(), [], []
+    vistas = set()
     for p in candidatos:
+        # La misma obra en dos ediciones (rústica y bolsillo, reimpresión…): una
+        obra = (apellido(p["autor"]), normaliza(p["titulo"])[:60])
+        if obra in vistas:
+            descartes["otra edición de la misma obra"] += 1
+            continue
+        vistas.add(obra)
         if not p["reciente"]:
             anteriores.append(p)
             continue
@@ -395,6 +515,7 @@ def autores_mas_prestados(cache, cliente, registros, opciones, progreso=None):
         por_autor[clave] += 1
         propuestas.append(p)
     return {"propuestas": propuestas, "anteriores": anteriores, "nucleo": len(nucleo),
+            "nucleo_autores": len(nucleo),
             "con_ficha": len(fichas_nucleo), "corporativos": corporativos,
             "candidatos": len(origen), "descartes": dict(descartes.most_common()),
             "desde_cache": en_cache, "pedidas_dilve": pedidas, "muestra_propia": muestra_propia,

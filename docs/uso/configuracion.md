@@ -1,23 +1,43 @@
-# Configuración de la biblioteca
+# Configuración
 
-El botón de la **rueda dentada**, arriba a la derecha, abre la configuración
-de tu biblioteca. Se guarda en el servidor, así que es la misma en cualquier
-ordenador desde el que entres.
+El botón de la **rueda dentada**, arriba a la derecha, abre la configuración.
+Es una sola, la de tu biblioteca, ordenada en apartados con un **menú a la
+izquierda**. Los cambios se guardan con **Guardar**; si cierras sin guardar,
+se deshacen.
 
-![Panel de configuración de la biblioteca: idioma, tema, colores, pestañas y secciones por signatura](../img/configuracion.png)
+!!! note "Captura pendiente"
+    `img/configuracion.png` — Configuración: el menú lateral a la izquierda y
+    el apartado «Tu biblioteca» abierto.
 
-## Opciones
+## Tu biblioteca
 
-- **Idioma**: castellano, euskera, catalán, gallego o inglés, según lo que
-  ofrezca la red. Se traducen también los nombres de sección y el informe.
+- **Nombre** de la biblioteca.
+- **Red a la que pertenece** (opcional): aparece en la cabecera.
+- **Habitantes atendidos**: para los documentos por habitante.
+- **Superficie útil (m²)**: para los documentos por m².
+- **Sucursal de los listados**: la apunta Bildumargi en la primera carga y
+  avisa si llegan listados de otra. **Olvidar la sucursal** sirve si cambias
+  de biblioteca.
+
+## Apariencia e idioma
+
+- **Idioma**: castellano, euskera, catalán, gallego o inglés. Se traducen
+  también los nombres de sección y el informe.
 - **Tema**: oscuro o claro.
 - **Colores de los gráficos**: tres paletas, todas legibles con las formas más
   comunes de daltonismo. «Azules» sirve para imprimir en blanco y negro.
-- **Pestañas**: ocultar las que no uses y elegir con cuál se abre Bildumargi.
-  Las que la red ha desactivado aparecen marcadas y no se pueden activar.
 
-Los cambios de tema y colores se ven al momento. Si cierras sin guardar, se
-deshacen.
+Los cambios de tema y colores se ven al momento.
+
+## Pestañas
+
+Ocultar las que no uses y elegir con cuál se abre Bildumargi.
+
+## Historial de cargas
+
+Si se guardan los listados de cada carga (necesario para
+[Seguimiento](seguimiento.md), las altas y bajas y **Abrir el último
+análisis**) y cuántas cargas se conservan.
 
 ## Secciones por signatura
 
@@ -43,9 +63,34 @@ Por defecto trae la clasificación habitual. Puedes **añadir**, **cambiar** o
   nombre dice «infantil» o «juvenil».
 
 Al guardar, el fondo se reclasifica al momento, sin volver a subir los
-ficheros. Con **Volver a la tabla de la red** recuperas la tabla común.
+ficheros. **Volver a la tabla estándar** recupera la de partida.
 
 !!! info "Solo afecta al análisis"
-    La tabla cambia Diagnóstico, Secciones e Informe. Las sugerencias de
-    compra siguen usando las secciones comunes de la red, que son las que se
-    pueden cruzar con su oferta.
+    La tabla cambia Diagnóstico, Secciones, Seguimiento e Informe. Las
+    sugerencias de compra siguen usando las secciones estándar, que son las que
+    se pueden cruzar con las materias de DILVE.
+
+## Novedades del libro español (DILVE)
+
+La cuenta de DILVE, la descarga de novedades y el freno de llamadas. Ver
+[DILVE](../administracion/dilve.md).
+
+## Fichas de DILVE de todo el catálogo
+
+La descarga de las fichas de tu catálogo, con el aviso de cuántas llamadas
+supone. Ver [DILVE](../administracion/dilve.md#fichas-de-todo-el-catalogo).
+
+## Catálogo MARC (idioma)
+
+La ruta del `.db` del catálogo del que se toma el idioma de los ejemplares.
+Ver [Catálogo MARC](../administracion/catalogo-marc.md).
+
+## Series ocultas
+
+Las colecciones que se marcaron como «no es una serie», con **Volver a
+mostrar** (ver [Series](series.md)).
+
+!!! tip "Clave de configuración"
+    En una instalación compartida (un servidor), se puede poner una clave para
+    que solo quien la sepa cambie la configuración. Ver
+    [Ajustes avanzados](../administracion/ajustes-avanzados.md).

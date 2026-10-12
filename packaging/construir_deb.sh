@@ -28,7 +28,7 @@ mkdir -p "$DESTINO/app/datos"
 cp -a backend frontend config.py conversor.py crear_demo.py iniciar.py \
       README.md VERSION.txt LICENSE AVISO-LICENCIA.md "$DESTINO/app/"
 # Solo los ficheros de partida: nada de datos de uso ni de pruebas
-cp datos/bibliotecas.xlsx datos/pautas.json "$DESTINO/app/datos/"
+cp datos/pautas.json "$DESTINO/app/datos/"
 [ -f datos/materias_secciones.json ] && cp datos/materias_secciones.json "$DESTINO/app/datos/"
 # Encabezados THEMA de EDItEUR, si quien construye los ha dejado en datos/
 for f in datos/thema.* datos/thema_*.*; do if [ -f "$f" ]; then cp "$f" "$DESTINO/app/datos/"; fi; done

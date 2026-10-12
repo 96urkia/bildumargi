@@ -16,19 +16,14 @@ El servicio
     journalctl -u bildumargi -f             (mensajes del programa)
 
 Primeros pasos
-  1. Clave de administración: está en /etc/bildumargi/secretos.env.
+  1. Clave de configuración: está en /etc/bildumargi/secretos.env.
      Para verla: sudo cat /etc/bildumargi/secretos.env
   2. Cuenta de DILVE (opcional): rellenar BILDUMARGI_DILVE_USUARIO y
      BILDUMARGI_DILVE_CLAVE en ese mismo fichero y reiniciar el servicio.
-  3. Directorio de bibliotecas: sustituir /var/lib/bildumargi/bibliotecas.xlsx
-     por el de la red.
+  3. Datos de la biblioteca (nombre, población, superficie): en la propia
+     aplicación, en Configuración (la rueda dentada).
   4. Publicarlo en la intranet: ver el ejemplo de nginx en
      /usr/share/doc/bildumargi/ejemplos/nginx-bildumargi.conf
-
-Base de datos de la red
-  sudo bildumargi conversor /ruta/exportacion.mrc
-  (se guarda en /var/lib/bildumargi/base_red.db; el fichero de entrada debe
-  poder leerlo el usuario bildumargi, por ejemplo copiándolo a /tmp)
 
 Actualizar
   sudo apt install ./bildumargi_<nueva versión>.deb

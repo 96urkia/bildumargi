@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Carpeta de cada biblioteca: datos/bibliotecas/<biblioteca>/
 
-    preferencias.json        su configuración (idioma, tema, pestañas…)
+    sugerencias_autores.json el último cálculo de «Autores más prestados»
     cargas/<fecha>/          cada carga: los listados tal como se subieron
         topografico/…txt     (uno o varios ficheros por tipo)
         resumen.json         indicadores de esa carga, para el seguimiento
@@ -67,7 +67,7 @@ class Almacen:
                     f.write(str(biblioteca) + "\n")
         return ruta
 
-    # -- preferencias ------------------------------------------------------
+    # -- ficheros JSON de la biblioteca ------------------------------------
     def leer_json(self, biblioteca, nombre):
         try:
             with open(os.path.join(self.carpeta(biblioteca, crear=False), nombre), encoding="utf-8") as f:
@@ -152,6 +152,21 @@ class Almacen:
                     with open(os.path.join(carpeta, nombre), "rb") as f:
                         subidos[tipo].append((nombre, f.read()))
         return subidos
+
+    def actualizar_resumen(self, biblioteca, id_carga, datos):
+        """Añade datos al resumen de una carga ya guardada (altas y bajas
+        calculadas después)."""
+        if self.error or not _R_CARGA.match(str(id_carga)):
+            return
+        ruta = os.path.join(self._carpeta_cargas(biblioteca, crear=False), id_carga, "resumen.json")
+        with self._candado:
+            try:
+                with open(ruta, encoding="utf-8") as f:
+                    resumen = json.load(f)
+            except (OSError, ValueError):
+                return
+            resumen.update(datos)
+            _escribir_json(ruta, resumen)
 
     def borrar_carga(self, biblioteca, id_carga):
         if not _R_CARGA.match(str(id_carga)):

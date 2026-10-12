@@ -32,6 +32,10 @@ from lxml import etree
 BASE_DAPI = "https://www.dilve.es/dilve/dilve/"
 FORMATO_FECHA = "%Y-%m-%dT%H:%M:%SZ"
 MAX_POR_LLAMADA = 128        # tope documentado de getRecordsX
+# Hasta esta fecha, el número de tomo de una colección no se leía (DILVE lo
+# pone en un TitleElement de nivel 01, después del nombre de la colección).
+# Las fichas con colección guardadas antes se vuelven a pedir para tenerlo.
+LECTOR_COLECCIONES = "2026-10-11T16:45:00Z"
 VENTANA_DIAS = 7
 DIAS_SIN_FICHA = 60          # cuánto se recuerda que un ISBN no está en DILVE
 PAUSA = 6.0                  # segundos entre llamadas: lo que recomienda DILVE
@@ -193,6 +197,15 @@ def isbn13_valido(isbn):
         return False
     total = sum(int(d) * (1 if i % 2 == 0 else 3) for i, d in enumerate(digitos[:12]))
     return (10 - total % 10) % 10 == int(digitos[12])
+
+
+def _bloques(conn, isbns, plantilla, antes=(), tam=900):
+    """Ejecuta `plantilla` (con «{marcas}») por bloques de ISBN, porque SQLite
+    limita el número de parámetros."""
+    isbns = [i for i in isbns if i]
+    for inicio in range(0, len(isbns), tam):
+        lote = isbns[inicio: inicio + tam]
+        yield from conn.execute(plantilla.format(marcas=",".join("?" * len(lote))), list(antes) + lote)
 
 
 def _ahora():
@@ -477,11 +490,18 @@ def _parsear_producto(prod):
             if tipo == "01" and nivel in (None, "01"):          # título del producto
                 p["titulo"] = titulo
                 p["subtitulo"] = _valor(elem, "Subtitle")
+        # Colección o serie: el nombre va en un TitleElement (nivel 02) y el
+        # número de tomo, en otro (nivel 01, «PartNumber») o en la secuencia.
         for col in _todos(desc, "Collection"):
-            elem = _primero(col, "TitleDetail/TitleElement")
-            if elem is not None and not p["coleccion"]:
-                p["coleccion"] = _valor(elem, "TitleText") or _valor(elem, "TitleWithoutPrefix")
-                p["num_coleccion"] = _valor(elem, "PartNumber")
+            if p["coleccion"]:
+                break
+            nombre = numero = None
+            for elem in _todos(col, "TitleElement"):
+                nombre = nombre or _valor(elem, "TitleText") or _valor(elem, "TitleWithoutPrefix")
+                numero = numero or _valor(elem, "PartNumber")
+            numero = numero or _valor(col, "CollectionSequence/CollectionSequenceNumber")
+            if nombre:
+                p["coleccion"], p["num_coleccion"] = nombre, numero
         for ext in _todos(desc, "Extent"):
             if _valor(ext, "ExtentType") in ("00", "11") and not p["paginas"]:
                 valor = _valor(ext, "ExtentValue")
@@ -750,6 +770,84 @@ class BaseNovedades:
         return nuevos
 
     # -- lectura -----------------------------------------------------------
+    def por_releer(self, isbns):
+        """Fichas con colección guardadas antes de que se leyera el número de
+        tomo, y sin él: se vuelven a pedir una vez."""
+        if not self.conn:
+            return set()
+        isbns = [i for i in isbns if i]
+        salida = set()
+        for inicio in range(0, len(isbns), 900):
+            lote = isbns[inicio: inicio + 900]
+            marcas = ",".join("?" * len(lote))
+            salida.update(f[0] for f in self.conn.execute(
+                f"""SELECT isbn FROM novedades WHERE isbn IN ({marcas}) AND coleccion IS NOT NULL
+                    AND (num_coleccion IS NULL OR num_coleccion = '')
+                    AND (actualizado IS NULL OR actualizado < ?)""", lote + [LECTOR_COLECCIONES]))
+        return salida
+
+    def colecciones(self, nombres):
+        """Lo que se sabe de unas colecciones: {colección: [{isbn, titulo,
+        num_coleccion, fecha_publicacion}…]} de todas las fichas guardadas."""
+        if not self.conn or not nombres:
+            return {}
+        nombres = list(nombres)
+        salida = {}
+        for inicio in range(0, len(nombres), 900):
+            lote = nombres[inicio: inicio + 900]
+            marcas = ",".join("?" * len(lote))
+            for f in self.conn.execute(
+                    f"""SELECT isbn, titulo, coleccion, num_coleccion, fecha_publicacion, editorial, cubierta
+                        FROM novedades WHERE coleccion IN ({marcas})""", lote):
+                salida.setdefault(f["coleccion"], []).append(dict(f))
+        return salida
+
+    def colecciones_de(self, isbns):
+        """{isbn: (colección, número)} de esas fichas."""
+        if not self.conn:
+            return {}
+        isbns = [i for i in isbns if i]
+        salida = {}
+        for inicio in range(0, len(isbns), 900):
+            lote = isbns[inicio: inicio + 900]
+            marcas = ",".join("?" * len(lote))
+            for f in self.conn.execute(
+                    f"""SELECT isbn, coleccion, num_coleccion, titulo, fecha_publicacion, cubierta FROM novedades
+                        WHERE isbn IN ({marcas}) AND coleccion IS NOT NULL""", lote):
+                salida[f["isbn"]] = dict(f)
+        return salida
+
+    def relacionados_de(self, isbns, codigo="22"):
+        """ISBN que esas fichas dan como relacionados (22 = del mismo autor)."""
+        if not self.conn:
+            return set()
+        return {f[0] for f in _bloques(self.conn, isbns,
+                "SELECT isbn_rel FROM relacionados WHERE codigo = ? AND isbn IN ({marcas})", (codigo,))}
+
+    def antiguas(self, isbns, dias):
+        """Fichas guardadas hace más de `dias` días."""
+        if not self.conn:
+            return set()
+        corte = (datetime.now(timezone.utc) - timedelta(days=dias)).strftime(FORMATO_FECHA)
+        return {f[0] for f in _bloques(self.conn, isbns,
+                "SELECT isbn FROM novedades WHERE (actualizado IS NULL OR actualizado < ?) AND isbn IN ({marcas})",
+                (corte,))}
+
+    def idiomas_de(self, isbns):
+        """{isbn: código de idioma} de las fichas guardadas, sin cargar el
+        resto de la ficha: es lo que necesita el análisis de cada carga."""
+        if not self.conn:
+            return {}
+        isbns = [i for i in isbns if i]
+        salida = {}
+        for inicio in range(0, len(isbns), 900):        # tope de variables de SQLite
+            lote = isbns[inicio: inicio + 900]
+            marcas = ",".join("?" * len(lote))
+            for isbn, idioma in self.conn.execute(
+                    f"SELECT isbn, idioma FROM novedades WHERE isbn IN ({marcas})", lote):
+                salida[isbn] = idioma or ""
+        return salida
+
     def leer_fichas(self, isbns=None):
         """Devuelve las fichas guardadas, en el mismo formato que el lector de
         ONIX (materias, contribuidores, relacionados y premios incluidos)."""
@@ -835,6 +933,16 @@ class BaseNovedades:
                               "total": len(faltan)})
         return guardadas
 
+    def releer(self, isbns, cliente):
+        """Vuelve a pedir estas fichas aunque ya estén guardadas (para leer
+        lo que antes se perdía). Devuelve cuántas se han recibido."""
+        isbns = [i for i in isbns if i]
+        if not isbns or cliente is None:
+            return 0
+        nuevas = cliente.fichas(isbns)
+        self.guardar(nuevas)
+        return len(nuevas)
+
     def estadisticas(self):
         if not self.conn:
             return {"registros": 0, "error": self.error}
@@ -854,17 +962,24 @@ class BaseNovedades:
 # ===========================================================================
 # Descarga y actualización
 # ===========================================================================
-def purgar(base, meses=3):
+def purgar(base, meses=3, conservar=None):
     """Ventana móvil: se conservan las novedades vistas en los últimos `meses`.
 
     Así el fichero no crece sin fin y siempre contiene lo reciente, que es lo
-    que sirve para sugerir compras."""
+    que sirve para sugerir compras. `conservar(base, isbns)`, si se da, recibe
+    lo que va a salir de la ventana antes de borrarlo (para guardar en otro
+    sitio, por ejemplo, los tomos de las series de la biblioteca)."""
     if not base.conn:
         return 0
     corte = (datetime.now(timezone.utc) - timedelta(days=int(meses) * 31)).strftime(FORMATO_FECHA)
+    viejas = [f["isbn"] for f in base.conn.execute(
+        "SELECT isbn FROM novedades WHERE alta_dilve < ?", (corte,))]
+    if conservar is not None and viejas:
+        try:
+            conservar(base, viejas)
+        except Exception:                                       # noqa: BLE001
+            pass                                                # nunca impide la limpieza
     with base.conn:
-        viejas = [f["isbn"] for f in base.conn.execute(
-            "SELECT isbn FROM novedades WHERE alta_dilve < ?", (corte,))]
         for tabla in ("contribuidores", "materias", "premios", "relacionados"):
             base.conn.execute(f"DELETE FROM {tabla} WHERE isbn IN (SELECT isbn FROM novedades WHERE alta_dilve < ?)",
                               (corte,))
@@ -873,7 +988,7 @@ def purgar(base, meses=3):
     return len(viejas)
 
 
-def descargar_inicial(base, cliente, meses_ventana=3, progreso=None, parar=None):
+def descargar_inicial(base, cliente, meses_ventana=3, progreso=None, parar=None, conservar=None):
     """Descarga TODAS las altas (novedades) de la ventana de la red.
 
     Solo se baja lo que se va a mostrar (tres meses por defecto). Pedir años
@@ -951,14 +1066,14 @@ def descargar_inicial(base, cliente, meses_ventana=3, progreso=None, parar=None)
         return {"guardados": guardados, "nuevos": altas, "completa": False}
     base.escribir("ultima_sincronizacion", _ahora())
     base.escribir("inicial_hasta", "")
-    borradas = purgar(base, meses_ventana)
+    borradas = purgar(base, meses_ventana, conservar)
     base.escribir("ultimo_resultado", f"Descarga inicial completa: {guardados} novedades guardadas "
                                       f"({altas} nuevas) de los últimos {int(meses_ventana)} meses"
                                       + (f"; {borradas} antiguas retiradas." if borradas else "."))
     return {"guardados": guardados, "nuevos": altas, "completa": True}
 
 
-def actualizar(base, cliente, meses_ventana=3, progreso=None, parar=None):
+def actualizar(base, cliente, meses_ventana=3, progreso=None, parar=None, conservar=None):
     """Trae las altas desde la última sincronización (o los últimos meses si la
     base está vacía) y retira lo que queda fuera de la ventana. Es lo que se
     ejecuta cada semana."""
@@ -989,7 +1104,7 @@ def actualizar(base, cliente, meses_ventana=3, progreso=None, parar=None):
     if cliente.forma_lista:
         base.escribir("forma_lista", cliente.forma_lista)
     base.escribir("ultima_sincronizacion", hasta)
-    borradas = purgar(base, meses_ventana)
+    borradas = purgar(base, meses_ventana, conservar)
     base.escribir("ultimo_resultado", f"Actualización: {guardados} novedades ({altas} nuevas) desde "
                                       f"{ultima}" + (f"; {borradas} fuera de la ventana retiradas." if borradas else "."))
     return {"guardados": guardados, "nuevos": altas, "revisados": len(isbns)}

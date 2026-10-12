@@ -32,8 +32,7 @@ const estado = {
     diagnostico: { texto: "", idioma: "__TODOS__", loc: "__TODAS__", publico: "todo" },
     secciones: { publico: "todo", idioma: "__TODOS__", loc: "__TODAS__", texto: "",
                  categoria: "", anio: "", prestamos: "todos", pagina: 1 },
-    red: { filtro: "todo" },
-    compras: { fuente: "presencia", personalizadas: false, ocultar_propios: true, anio_minimo: null, idioma: "__TODOS__", seccion: "", campo: "titulo", texto: "",
+    compras: { fuente: "autores", personalizadas: false, ocultar_propios: true, anio_minimo: null, idioma: "__TODOS__", seccion: "", campo: "titulo", texto: "",
                excluir_fondo: true, solo_bibliografico: true },
   },
 };
@@ -63,6 +62,18 @@ function aviso(tipo, texto, lista) {
     div.appendChild(ul);
   }
   return div;
+}
+
+// Avisos de arriba: etiquetas compactas, cada una con su «×» para quitarla.
+function ponerAviso(el) {
+  el.classList.add("compacto");
+  const quitar = crear("button", "cerrar-aviso", "×");
+  quitar.type = "button";
+  quitar.title = t("cerrar");
+  quitar.setAttribute("aria-label", t("cerrar"));
+  quitar.addEventListener("click", () => el.remove());
+  el.appendChild(quitar);
+  $("#avisos-globales").appendChild(el);
 }
 
 function cargando(contenedor) {
@@ -353,6 +364,9 @@ async function entrarEnAnalisis(resultado, reapertura = null) {
   estado.metricas = resultado.metricas;
   estado.filtros = resultado.filtros;
   estado.hayIdiomas = resultado.hay_idiomas;
+  estado.fechaCarga = resultado.fecha_carga || (reapertura && reapertura.fecha)
+    || (resultado.carga ? new Date().toISOString() : null);
+  estado.cargaAnterior = Boolean(reapertura && reapertura.anterior);
 
   $("#bienvenida").classList.add("oculto");
   $("#analisis").classList.remove("oculto");
@@ -360,29 +374,193 @@ async function entrarEnAnalisis(resultado, reapertura = null) {
 
   pintarIdentidad(resultado);
   pintarMetricas(estado.metricas);
-  await cargarPreferenciasBiblioteca();
   pintarNavegador();
 
-  const avisos = $("#avisos-globales");
-  avisos.innerHTML = "";
-  // Al reabrir una carga anterior, que quede claro qué fecha se está viendo
-  if (reapertura && reapertura.anterior) avisos.appendChild(aviso("info", t("seg_viendo_anterior", { f: fechaCorta(reapertura.fecha) })));
-  if (resultado.modo_reducido) avisos.appendChild(aviso("atencion", t("modo_reducido")));
-  if (resultado.sin_no_prestados) avisos.appendChild(aviso("atencion", t("aviso_sin_nunca")));
-  if (resultado.avisos && resultado.avisos.length) avisos.appendChild(aviso("info", "", resultado.avisos));
+  $("#avisos-globales").innerHTML = "";
+  if (resultado.modo_reducido) ponerAviso(aviso("atencion", t("modo_reducido")));
+  if (resultado.sin_no_prestados) ponerAviso(aviso("atencion", t("aviso_sin_nunca")));
+  if (resultado.falta_poblacion) ponerAviso(aviso("atencion", t("falta_poblacion")));
+  if (resultado.cambios) ponerAviso(avisoCambios(resultado.cambios));
+  const avisoIdioma = avisoIdiomas(resultado.idiomas);
+  if (avisoIdioma) ponerAviso(avisoIdioma);
+  (resultado.avisos || []).forEach((texto) => ponerAviso(aviso("info", texto)));
   await mostrarVista(vistaInicial());
+}
+
+// «Respecto a la carga del…: 97 altas y 3 bajas», con enlace a Seguimiento.
+function avisoCambios(c) {
+  const caja = aviso("info", t("cambios_aviso", { f: fechaCorta(c.anterior && c.anterior.fecha),
+                                                 a: miles(c.altas), b: miles(c.bajas) }));
+  if (conf().historial) {
+    const ver = crear("button", "enlace-discreto enlace-aviso", t("cambios_ver"));
+    ver.type = "button";
+    ver.addEventListener("click", () => mostrarVista("seguimiento"));
+    caja.appendChild(ver);
+  }
+  return caja;
+}
+
+// Qué parte del fondo tiene idioma conocido y de dónde sale.
+function textoCobertura(cuenta) {
+  const conocido = (cuenta.marc || 0) + (cuenta.dilve || 0) + (cuenta.signatura || 0);
+  return t("idioma_cobertura", { p: pct(cuenta.total ? (conocido / cuenta.total) * 100 : 0),
+                                m: miles(cuenta.marc || 0), d: miles(cuenta.dilve || 0), s: miles(cuenta.signatura || 0) });
+}
+
+// Si se conoce el idioma de poco fondo y hay DILVE, se ofrece descargar las
+// fichas de todo el catálogo (sin empezar nada: primero se ven las cifras).
+function avisoIdiomas(cuenta) {
+  if (!cuenta || !cuenta.total || MODO_DEMO) return null;
+  const conocido = (cuenta.marc || 0) + (cuenta.dilve || 0) + (cuenta.signatura || 0);
+  if (conocido / cuenta.total >= 0.8 || !estado.config.dilve_credenciales || cuenta.por_pedir === 0) return null;
+  const caja = aviso("info", t("idioma_cobertura_baja", { p: pct((conocido / cuenta.total) * 100) }));
+  const ver = crear("button", "enlace-discreto enlace-aviso", t("cat_ver"));
+  ver.type = "button";
+  ver.addEventListener("click", () => abrirDescargaCatalogo());
+  caja.appendChild(ver);
+  return caja;
+}
+
+/* --- Fichas de DILVE de todo el catálogo ------------------------------------
+   Antes de pedir nada se enseña cuánto supone (llamadas, minutos, días con la
+   cuota) con un aviso bien visible; solo empieza si se confirma. Se puede
+   parar, y lo descargado se conserva: otro día se continúa. */
+let refrescoCatalogo = null;
+
+function abrirDescargaCatalogo() {
+  const contenido = crear("div", "config descarga-catalogo");
+  const cerrar = abrirModal(t("cat_titulo"), contenido, () => clearTimeout(refrescoCatalogo));
+  montarDescargaCatalogo(contenido, cerrar);
+}
+
+// `cerrar`: el de la ventana propia; null si va dentro de Configuración (sin
+// botones de cerrar ni cancelar: los pone la propia Configuración).
+function montarDescargaCatalogo(contenido, cerrar) {
+  let enMarcha = false;
+
+  const boton = (texto, clase, alPulsar) => {
+    const b = crear("button", clase, texto);
+    b.type = "button";
+    b.addEventListener("click", alPulsar);
+    return b;
+  };
+
+  const pintar = async () => {
+    clearTimeout(refrescoCatalogo);
+    if (!contenido.isConnected) return;
+    let d;
+    try { d = await API.catalogoDilve(estado.sesion); }
+    catch (e) { contenido.replaceChildren(aviso("error", e.message)); return; }
+    if (!contenido.isConnected) return;
+    contenido.innerHTML = "";
+    contenido.appendChild(crear("p", "ayuda-config", t("cat_intro")));
+    contenido.appendChild(crear("p", "cifras-catalogo", t("cat_cifras", {
+      e: miles(d.ejemplares), s: miles(d.sin_isbn), i: miles(d.isbn), t: miles(d.descargados),
+      d: miles(d.sin_ficha), p: miles(d.pendientes) })));
+    if (d.releer) contenido.appendChild(crear("p", "ayuda-config", t("cat_releer", { r: miles(d.releer) })));
+    if (d.idiomas && d.idiomas.total) contenido.appendChild(crear("p", "ayuda-config", textoCobertura(d.idiomas)));
+    const tarea = d.tarea || {};
+    const pie = crear("div", "pie-config");
+
+    if (tarea.en_curso) {
+      enMarcha = true;
+      const p = tarea.progreso || {};
+      contenido.appendChild(aviso("info", t("cat_en_curso", {
+        a: miles(p.pedidas || 0), b: miles(p.total || 0), l: miles(p.llamadas || 0) })));
+      const barra = crear("div", "barra-progreso");
+      const relleno = crear("span");
+      relleno.style.width = `${p.total ? Math.round(((p.pedidas || 0) / p.total) * 100) : 0}%`;
+      barra.appendChild(relleno);
+      contenido.appendChild(barra);
+      pie.append(boton(t("cat_parar"), "boton secundario", async () => {
+        await API.catalogoDilveAccion(estado.sesion, estado.tokenAdmin, "parar").catch(() => {});
+        pintar();
+      }));
+      if (cerrar) pie.append(boton(t("cerrar"), "boton", () => cerrar()));
+      contenido.appendChild(pie);
+      refrescoCatalogo = setTimeout(pintar, 2500);       // sigue el avance
+      return;
+    }
+
+    // Recién terminada: el idioma ya está en el análisis
+    if (enMarcha) {
+      enMarcha = false;
+      if (tarea.error) contenido.appendChild(aviso("atencion", t("cat_interrumpido", { e: tarea.error })));
+      else if (tarea.parada) contenido.appendChild(aviso("info", t("cat_parado")));
+      else contenido.appendChild(aviso("ok", t("cat_terminado", { r: miles((tarea.resultado || {}).recibidas || 0) })));
+      await refrescarTrasCatalogo();
+    }
+
+    if (!d.credenciales) {
+      contenido.appendChild(aviso("atencion", t("cat_sin_credenciales")));
+    } else if (d.bloqueo) {
+      contenido.appendChild(aviso("error", t("cat_bloqueo")));
+    } else if (!d.pendientes && !d.releer) {
+      contenido.appendChild(aviso("info", t("cat_nada")));
+    } else {
+      // El aviso grande: cuánto supone, antes de confirmar
+      const caja = crear("div", "aviso-grande");
+      caja.appendChild(crear("h3", null, t("cat_aviso_titulo")));
+      caja.appendChild(crear("p", "cifra-grande", t("cat_llamadas", { l: miles(d.llamadas), m: miles(d.minutos) })));
+      caja.appendChild(crear("p", null, t("cat_aviso", {
+        l: miles(d.llamadas), s: decimal(d.pausa, 0), c: miles(d.cuota), h: miles(d.quedan_hoy),
+        dias: d.dias <= 1 && d.llamadas <= d.quedan_hoy ? t("cat_dias_hoy") : t("cat_dias_varios", { n: miles(d.dias) }) })));
+      caja.appendChild(crear("p", null, t("cat_aviso_red")));
+      contenido.appendChild(caja);
+      const mensajes = crear("div");
+      contenido.appendChild(mensajes);
+      const confirmar = boton(t("cat_confirmar"), "boton", async () => {
+        confirmar.disabled = true;
+        try {
+          await API.catalogoDilveAccion(estado.sesion, estado.tokenAdmin, "iniciar");
+          enMarcha = true;
+          pintar();
+        } catch (e) {
+          confirmar.disabled = false;
+          const texto = t(e.message);
+          mensajes.replaceChildren(aviso("error", texto !== e.message ? texto : e.message));
+        }
+      });
+      if (cerrar) pie.append(boton(t("cancelar"), "boton secundario", () => cerrar()));
+      pie.append(confirmar);
+      contenido.appendChild(pie);
+      return;
+    }
+    if (cerrar) pie.append(boton(t("cerrar"), "boton", () => cerrar()));
+    contenido.appendChild(pie);
+  };
+
+  cargando(contenido);
+  // Se pide cuando el panel ya está en la página (en Configuración se monta antes)
+  setTimeout(pintar, 0);
+}
+
+// Con fichas nuevas, el análisis abierto ya tiene idioma: se repinta.
+async function refrescarTrasCatalogo() {
+  if (!estado.sesion) return;
+  try {
+    const r = await API.metricas(estado.sesion);
+    estado.hayIdiomas = r.hay_idiomas;
+    estado.series = null;
+    pintarNavegador();
+    if (estado.vista) mostrarVista(estado.vista);
+  } catch { /* la sesión ha caducado */ }
 }
 
 function pintarIdentidad(resultado) {
   estado.identidad = resultado;   // para volver a rotularla si cambia el idioma
   $("#pastilla-biblioteca").classList.remove("oculto");
-  $("#nombre-biblioteca").textContent = resultado.biblioteca;
-  $("#titulo-biblioteca").textContent = resultado.biblioteca;
+  const nombre = resultado.biblioteca || t("biblioteca_sin_nombre");
+  $("#nombre-biblioteca").textContent = nombre;
+  $("#titulo-biblioteca").textContent = nombre;
   const m = resultado.metricas;
   const partes = [];
   if (m.poblacion) partes.push(`${miles(m.poblacion)} ${t("habitantes")}`);
   partes.push(m.superficie ? `${miles(m.superficie)} ${t("superficie")}` : t("sin_superficie"));
-  partes.push(`${t("sucursal")} ${resultado.sucursal}`);
+  if (resultado.sucursal != null) partes.push(`${t("sucursal")} ${resultado.sucursal}`);
+  if (estado.fechaCarga) {
+    partes.push(t(estado.cargaAnterior ? "carga_anterior_del" : "carga_del", { f: fechaCorta(estado.fechaCarga) }));
+  }
   $("#datos-biblioteca").textContent = partes.join("  \u00b7  ");
 }
 
@@ -417,73 +595,44 @@ function panel(titulo, subtitulo, acciones) {
 
 function pintarMetricas(m) { estado.metricas = m; }
 
-/* --- Acceso con clave -------------------------------------------------------
-   Para volver al último análisis guardado sin subir otra vez los ficheros. La
-   biblioteca escribe su nombre y la clave que le da el administrador (columna
-   Clave de bibliotecas.xlsx). Solo aparece si la red lo tiene disponible. */
-function pintarAccesoClave() {
+/* --- Abrir el último análisis ----------------------------------------------
+   Para volver al último análisis guardado sin subir otra vez los ficheros.
+   Aparece si hay historial y alguna carga guardada. */
+function pintarAbrirUltima() {
   const hueco = $("#acceso-clave");
   if (!hueco) return;
-  const previo = {
-    biblioteca: (hueco.querySelector("#acceso-biblioteca") || {}).value || "",
-    clave: (hueco.querySelector("#acceso-clave-campo") || {}).value || "",
-  };
   hueco.innerHTML = "";
-  const disponible = Boolean(!MODO_DEMO && estado.config && estado.config.acceso_clave);
-  hueco.classList.toggle("oculto", !disponible);
+  const ultima = !MODO_DEMO && estado.config && estado.config.ultima_carga;
+  hueco.classList.toggle("oculto", !ultima);
   const entrada = document.querySelector("#bienvenida .entrada");
-  if (entrada) entrada.classList.toggle("con-acceso", disponible);
-  if (!disponible) return;
+  if (entrada) entrada.classList.toggle("con-acceso", Boolean(ultima));
+  if (!ultima) return;
 
-  const formulario = crear("form", "tarjeta-acceso");
-  formulario.noValidate = true;
-  formulario.appendChild(crear("h2", null, t("acceso_titulo")));
-  formulario.appendChild(crear("p", "paso-texto", t("acceso_texto")));
-  const campo = (etiqueta, id, tipo, marcador, autocompletar, valor) => {
-    const l = crear("label", "campo");
-    l.appendChild(crear("span", "rotulo-campo", etiqueta));
-    const i = crear("input");
-    i.id = id; i.type = tipo; i.value = valor; i.autocomplete = autocompletar;
-    if (marcador) i.placeholder = marcador;
-    l.appendChild(i);
-    formulario.appendChild(l);
-    return i;
-  };
-  const biblioteca = campo(t("acceso_biblioteca"), "acceso-biblioteca", "text", t("acceso_ejemplo"), "username", previo.biblioteca);
-  const clave = campo(t("acceso_clave"), "acceso-clave-campo", "password", "", "current-password", previo.clave);
-  const boton = crear("button", "boton", t("acceso_entrar"));
-  boton.type = "submit";
-  formulario.appendChild(boton);
+  const tarjeta = crear("div", "tarjeta-acceso");
+  tarjeta.appendChild(crear("h2", null, t("ultima_titulo")));
+  tarjeta.appendChild(crear("p", "paso-texto", t("ultima_texto", { f: fechaCorta(ultima.fecha) })));
+  const boton = crear("button", "boton", t("ultima_abrir"));
+  boton.type = "button";
   const mensajes = crear("div", "mensajes-acceso");
-  formulario.appendChild(mensajes);
-  formulario.appendChild(crear("p", "nota-pie", t("acceso_olvido")));
-  formulario.addEventListener("submit", async (ev) => {
-    ev.preventDefault();
+  boton.addEventListener("click", async () => {
     mensajes.innerHTML = "";
-    if (!biblioteca.value.trim() || !clave.value) {
-      mensajes.appendChild(aviso("atencion", t("acceso_faltan")));
-      return;
-    }
     boton.disabled = true;
-    boton.textContent = t("acceso_entrando");
+    boton.textContent = t("ultima_abriendo");
     try {
-      const resultado = await API.entrar(biblioteca.value.trim(), clave.value);
-      clave.value = "";
+      const resultado = await API.abrirUltima();
       await entrarEnAnalisis(resultado);
-      if (resultado.fecha_carga) {
-        $("#avisos-globales").prepend(aviso("info", t("acceso_viendo", { f: fechaCorta(resultado.fecha_carga) })));
-      }
     } catch (e) {
-      // El servidor responde con claves de texto (acceso_incorrecto…); si no
+      // El servidor responde con claves de texto (acceso_sin_carga…); si no
       // es una de ellas (errores de análisis), se enseña tal cual
       const texto = t(e.message);
       mensajes.appendChild(aviso("error", texto !== e.message ? texto : e.message));
     } finally {
       boton.disabled = false;
-      boton.textContent = t("acceso_entrar");
+      boton.textContent = t("ultima_abrir");
     }
   });
-  hueco.appendChild(formulario);
+  tarjeta.append(boton, mensajes);
+  hueco.appendChild(tarjeta);
 }
 
 function reiniciar() {
@@ -498,7 +647,7 @@ function reiniciar() {
   $("#avisos-carga").innerHTML = "";
   window.scrollTo({ top: 0 });
   pintarPasos();
-  pintarAccesoClave();
+  pintarAbrirUltima();
   actualizarBotonAnalizar();
   pintarAvisosDeArranque();
 }
@@ -510,28 +659,22 @@ function seccionesPosibles() {
   const secciones = [
     { clave: "diagnostico", etiqueta: "nav_diagnostico" },
     { clave: "secciones", etiqueta: "nav_secciones" },
-    // La sección entera desaparece si no hay base de datos de la red: sin el
-    // catálogo colectivo no hay nada que recomendar.
-    { clave: "compras", etiqueta: "nav_compras", requiere: estado.config.recomendaciones_activas },
-    { clave: "red", etiqueta: "nav_red",
-      requiere: Boolean(estado.config.recomendaciones_activas && estado.config.valoraciones
-                        && estado.config.valoraciones.activo) },
-    // El seguimiento necesita que la red guarde el historial de cargas.
-    { clave: "seguimiento", etiqueta: "nav_seguimiento", requiere: Boolean(configRed().historial) },
+    { clave: "series", etiqueta: "nav_series" },
+    // La sección entera desaparece sin DILVE: sin él no hay nada que sugerir.
+    { clave: "compras", etiqueta: "nav_compras", requiere: fuentesCompra().length > 0 },
+    // El seguimiento necesita que se guarde el historial de cargas.
+    { clave: "seguimiento", etiqueta: "nav_seguimiento", requiere: Boolean(conf().historial) },
   ];
-  const activas = configRed().pestanas_activas;
   return secciones.map((s) => {
-    const tecnica = s.requiere === undefined || Boolean(s.requiere);
-    const porRed = !activas || activas.includes(s.clave);
+    const disponible = s.requiere === undefined || Boolean(s.requiere);
     // motivo: por qué no se puede usar (lo enseña la configuración)
-    return { ...s, disponible: tecnica && porRed,
-             motivo: !porRed ? "config_desactivada_red" : !tecnica ? "config_no_disponible" : null };
+    return { ...s, disponible, motivo: disponible ? null : "config_no_disponible" };
   });
 }
 
-// Configuración de la red (la decide la administración). Sin ella, todo activo.
-function configRed() {
-  return (estado.config && estado.config.red) || {};
+// La configuración de la biblioteca, tal como la guarda el servidor.
+function conf() {
+  return (estado.config && estado.config.configuracion) || {};
 }
 
 // Pestañas que se ven: las disponibles menos las que la biblioteca ha
@@ -544,7 +687,7 @@ function seccionesDisponibles() {
 }
 
 // Menú lateral. «Sugerencias de compra» despliega sus fuentes como submenú:
-// al elegir una, el panel de arriba (indicadores, matriz y oferta) no cambia;
+// al elegir una, el panel de arriba (indicadores, matriz y demanda) no cambia;
 // solo cambia la lista de abajo.
 function pintarNavegador() {
   const nav = $("#navegador");
@@ -599,12 +742,12 @@ async function mostrarVista(clave) {
   soltarMedidores();
   // Secciones es un panel de una sola pantalla: el documento deja de crecer
   // y la vista se ajusta al alto de la ventana (ver .modo-panel en el CSS).
-  document.body.classList.toggle("modo-panel", ["diagnostico", "secciones", "compras", "red", "seguimiento"].includes(clave));
+  document.body.classList.toggle("modo-panel", ["diagnostico", "secciones", "compras", "seguimiento"].includes(clave));
   const vista = $("#vista");
   cargando(vista);
   try {
     const pintores = {
-      diagnostico: vistaDiagnostico, secciones: vistaSecciones, compras: vistaCompras, red: vistaRed,
+      diagnostico: vistaDiagnostico, secciones: vistaSecciones, series: vistaSeries, compras: vistaCompras,
       seguimiento: vistaSeguimiento,
     };
     await (pintores[clave] || vistaDiagnostico)(vista);
@@ -1569,73 +1712,303 @@ function miga(texto, alQuitar) {
 }
 
 /* ==========================================================================
-   Fichas y valoraciones
+   Vista: series
+   Las colecciones de DILVE con tomos numerados que tiene la biblioteca. Un
+   recuadro por serie; al pulsarlo, sus tomos con préstamos y año, y los que
+   faltan: huecos en la numeración y tomos posteriores que DILVE ya conoce.
+   ========================================================================== */
+async function vistaSeries(vista) {
+  soltarMedidores();
+  const d = await API.series(estado.sesion);
+  const c = estado.controles.series || (estado.controles.series = { texto: "", solo_faltan: false });
+  vista.innerHTML = "";
+  const raiz = crear("div", "vista-series");
+  vista.appendChild(raiz);
+
+  // Hasta que estén todas las fichas, el resultado es parcial: se avisa
+  if ((d.fichas_pendientes || d.fichas_releer) && d.credenciales) {
+    const caja = aviso("info", t("series_parcial", { p: miles(d.fichas_pendientes + d.fichas_releer) }));
+    const ver = crear("button", "enlace-discreto enlace-aviso", t("cat_ver"));
+    ver.type = "button";
+    ver.addEventListener("click", () => abrirDescargaCatalogo());
+    caja.appendChild(ver);
+    raiz.appendChild(caja);
+  }
+
+  const barra = crear("div", "barra-superior barra-series");
+  barra.appendChild(entradaTexto(t("termino"), c.texto, t("series_buscar"), (v) => { c.texto = v.trim(); pintarLista(); }, "busqueda"));
+  barra.appendChild(casilla(t("series_solo_faltan"), c.solo_faltan, (v) => { c.solo_faltan = v; pintarLista(); }));
+  if (d.credenciales && !MODO_DEMO) {
+    const completar = crear("button", "boton secundario", t("ser_completar"));
+    completar.type = "button";
+    completar.title = t("ser_completar_ayuda");
+    completar.addEventListener("click", () => abrirCompletarSeries());
+    barra.appendChild(completar);
+  }
+  const resumen = crear("span", "resumen-series");
+  barra.appendChild(resumen);
+  raiz.appendChild(barra);
+  raiz.appendChild(crear("p", "ayuda-config", t("series_intro")));
+  const rejilla = crear("div", "rejilla-series");
+  raiz.appendChild(rejilla);
+  if (d.ocultas && d.ocultas.length) {
+    const ocultas = crear("p", "nota-pie");
+    ocultas.append(t("series_ocultas", { n: miles(d.ocultas.length) }), " ");
+    const ver = crear("button", "enlace-discreto", t("series_ver_ocultas"));
+    ver.type = "button";
+    ver.addEventListener("click", () => abrirConfiguracion("series"));
+    ocultas.appendChild(ver);
+    raiz.appendChild(ocultas);
+  }
+
+  function pintarLista() {
+    const buscado = c.texto.toLowerCase();
+    const lista = d.series.filter((x) => (!buscado || x.nombre.toLowerCase().includes(buscado))
+      && (!c.solo_faltan || x.huecos || x.posteriores));
+    resumen.textContent = t("series_resumen", { n: miles(lista.length), t: miles(d.series.length) });
+    rejilla.innerHTML = "";
+    if (!lista.length) {
+      rejilla.appendChild(crear("p", "vacio", d.series.length ? t("sin_resultados") : t("series_ninguna")));
+      return;
+    }
+    lista.forEach((x) => rejilla.appendChild(tarjetaSerie(x)));
+  }
+  pintarLista();
+}
+
+/* --- Completar las series --------------------------------------------------
+   Pide a DILVE las fichas de los libros que pueden ser tomos de las series
+   (los «del mismo autor» que dan las fichas de los tomos propios y los de
+   esos autores en el catálogo de la red). Como en la descarga del catálogo:
+   primero las cifras y el aviso, y solo empieza si se confirma. */
+let refrescoSeries = null;
+
+function abrirCompletarSeries() {
+  const contenido = crear("div", "config descarga-catalogo");
+  const cerrar = abrirModal(t("ser_completar"), contenido, () => clearTimeout(refrescoSeries));
+  let enMarcha = false;
+  const boton = (texto, clase, alPulsar) => {
+    const b = crear("button", clase, texto);
+    b.type = "button";
+    b.addEventListener("click", alPulsar);
+    return b;
+  };
+  const pintar = async () => {
+    clearTimeout(refrescoSeries);
+    if (!contenido.isConnected) return;
+    let d;
+    try { d = await API.completarSeries(estado.sesion); }
+    catch (e) { contenido.replaceChildren(aviso("error", e.message)); return; }
+    if (!contenido.isConnected) return;
+    contenido.innerHTML = "";
+    contenido.appendChild(crear("p", "ayuda-config", t("ser_intro")));
+    contenido.appendChild(crear("p", "cifras-catalogo", t("ser_cifras", {
+      s: miles(d.series), d: miles(d.dilve), r: miles(d.red), p: miles(d.pendientes), a: miles(d.releer) })));
+    if (!d.hay_red) contenido.appendChild(aviso("info", t("ser_sin_red")));
+    const tarea = d.tarea || {};
+    const pie = crear("div", "pie-config");
+    if (tarea.en_curso) {
+      enMarcha = true;
+      const p = tarea.progreso || {};
+      contenido.appendChild(aviso("info", t("cat_en_curso", {
+        a: miles(p.pedidas || 0), b: miles(p.total || 0), l: miles(p.llamadas || 0) })));
+      const barra = crear("div", "barra-progreso");
+      const relleno = crear("span");
+      relleno.style.width = `${p.total ? Math.round(((p.pedidas || 0) / p.total) * 100) : 0}%`;
+      barra.appendChild(relleno);
+      contenido.appendChild(barra);
+      pie.append(boton(t("cat_parar"), "boton secundario", async () => {
+        await API.completarSeriesAccion(estado.sesion, estado.tokenAdmin, "parar").catch(() => {});
+        pintar();
+      }), boton(t("cerrar"), "boton", () => cerrar()));
+      contenido.appendChild(pie);
+      refrescoSeries = setTimeout(pintar, 2500);
+      return;
+    }
+    if (enMarcha) {
+      enMarcha = false;
+      if (tarea.error) contenido.appendChild(aviso("atencion", t("cat_interrumpido", { e: tarea.error })));
+      else if (tarea.parada) contenido.appendChild(aviso("info", t("cat_parado")));
+      else contenido.appendChild(aviso("ok", t("ser_terminado", { r: miles((tarea.resultado || {}).recibidas || 0) })));
+      estado.series = null;
+      if (estado.vista === "series") mostrarVista("series");
+    }
+    if (!d.credenciales) {
+      contenido.appendChild(aviso("atencion", t("cat_sin_credenciales")));
+    } else if (d.bloqueo) {
+      contenido.appendChild(aviso("error", t("cat_bloqueo")));
+    } else if (!d.pendientes && !d.releer) {
+      contenido.appendChild(aviso("info", t("ser_nada")));
+    } else {
+      const caja = crear("div", "aviso-grande");
+      caja.appendChild(crear("h3", null, t("cat_aviso_titulo")));
+      caja.appendChild(crear("p", "cifra-grande", t("cat_llamadas", { l: miles(d.llamadas), m: miles(d.minutos) })));
+      caja.appendChild(crear("p", null, t("cat_aviso", {
+        l: miles(d.llamadas), s: decimal(d.pausa, 0), c: miles(d.cuota), h: miles(d.quedan_hoy),
+        dias: d.dias <= 1 && d.llamadas <= d.quedan_hoy ? t("cat_dias_hoy") : t("cat_dias_varios", { n: miles(d.dias) }) })));
+      caja.appendChild(crear("p", null, t("cat_aviso_red")));
+      contenido.appendChild(caja);
+      const mensajes = crear("div");
+      contenido.appendChild(mensajes);
+      const confirmar = boton(t("cat_confirmar"), "boton", async () => {
+        confirmar.disabled = true;
+        try {
+          await API.completarSeriesAccion(estado.sesion, estado.tokenAdmin, "iniciar");
+          enMarcha = true;
+          pintar();
+        } catch (e) {
+          confirmar.disabled = false;
+          const texto = t(e.message);
+          mensajes.replaceChildren(aviso("error", texto !== e.message ? texto : e.message));
+        }
+      });
+      pie.append(boton(t("cancelar"), "boton secundario", () => cerrar()), confirmar);
+      contenido.appendChild(pie);
+      return;
+    }
+    pie.append(boton(t("cerrar"), "boton", () => cerrar()));
+    contenido.appendChild(pie);
+  };
+  cargando(contenido);
+  pintar();
+}
+
+function tarjetaSerie(x) {
+  const boton = crear("button", "tarjeta-serie");
+  boton.type = "button";
+  boton.appendChild(miniaturaLibro({ cubierta: x.portada, titulo: x.nombre }, "mediana"));
+  const b = crear("span", "cuerpo-serie");
+  boton.appendChild(b);
+  b.appendChild(crear("span", "nombre-serie", x.nombre));
+  b.appendChild(crear("span", "datos-serie", t("series_tomos", { n: miles(x.tomos), u: miles(x.ultimo) })));
+  if (x.anio_min) {
+    b.appendChild(crear("span", "datos-serie",
+      x.anio_min === x.anio_max ? String(x.anio_min) : `${x.anio_min}–${x.anio_max}`));
+  }
+  // Préstamo: ejemplares que han salido en el periodo de los listados
+  const uso = crear("span", "uso-serie");
+  const pista = crear("span", "pista");
+  const relleno = crear("span", "relleno");
+  relleno.style.width = `${x.ejemplares ? Math.round((x.prestados / x.ejemplares) * 100) : 0}%`;
+  pista.appendChild(relleno);
+  uso.append(pista, crear("span", null, t("series_prestados", { p: miles(x.prestados), e: miles(x.ejemplares) })));
+  b.appendChild(uso);
+  const marcas = crear("span", "marcas-serie");
+  if (x.huecos) marcas.appendChild(distintivo(t("series_faltan", { n: miles(x.huecos) }), "aviso"));
+  if (x.posteriores) marcas.appendChild(distintivo(t("series_nuevos", { n: miles(x.posteriores) }), "info"));
+  if (x.posibles) marcas.appendChild(distintivo(t("series_posibles", { n: miles(x.posibles) }), "frio"));
+  if (!x.huecos && !x.posteriores) marcas.appendChild(distintivo(t("series_completa"), "ok"));
+  b.appendChild(marcas);
+  boton.addEventListener("click", () => abrirSerie(x));
+  return boton;
+}
+
+// Catálogo de las librerías (CEGAL) con la búsqueda de la serie hecha: ahí
+// salen los tomos con su número. Se abre en otra pestaña; Bildumargi no lo
+// consulta por su cuenta.
+function enlaceBuscarSerie(nombre) {
+  const a = crear("a", "boton secundario", t("series_buscar_web"));
+  a.href = `https://www.todostuslibros.com/busquedas?keyword=${encodeURIComponent(nombre)}`;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.title = t("series_buscar_web_ayuda");
+  return a;
+}
+
+const ESTADOS_TOMO = {
+  propio: "tomo_propio", hueco: "tomo_hueco", posterior: "tomo_posterior", posible: "tomo_posible",
+};
+
+function abrirSerie(x) {
+  const contenido = crear("div", "detalle-serie");
+  const cabeza = crear("div", "cabeza-detalle-serie");
+  cabeza.appendChild(miniaturaLibro({ cubierta: x.portada, titulo: x.nombre }, "mediana"));
+  const textoCabeza = crear("div");
+  textoCabeza.appendChild(crear("p", "datos-serie", [
+    t("series_tomos", { n: miles(x.tomos), u: miles(x.ultimo) }),
+    t("series_prestados", { p: miles(x.prestados), e: miles(x.ejemplares) }),
+    x.prestamos ? t("series_prestamos", { n: miles(x.prestamos) }) : null,
+  ].filter(Boolean).join(" · ")));
+  textoCabeza.appendChild(enlaceBuscarSerie(x.nombre));
+  cabeza.appendChild(textoCabeza);
+  contenido.appendChild(cabeza);
+  const textoPrestamo = (f) => {
+    if (f.estado === "hueco" || f.estado === "posterior") return "";
+    if (f.prestamos) return t("series_n_prestamos", { n: miles(f.prestamos) });
+    if (f.ejemplares > 1) return t("series_prestados", { p: miles(f.prestados), e: miles(f.ejemplares) });
+    return f.prestados ? t("prestado_si") : t("prestado_no");
+  };
+  const textoEstado = (f) => {
+    let texto = t(ESTADOS_TOMO[f.estado] || f.estado);
+    if (f.estado === "posterior" && f.fecha_publicacion) texto += ` · ${fechaOnix(f.fecha_publicacion)}`;
+    if (f.sin_ficha) texto += ` (${t("tomo_sin_ficha")})`;
+    return texto;
+  };
+  const columnas = [
+    { clave: "cubierta", titulo: "", tipo: "texto", ancho: "5%", ordenable: false,
+      render: (f) => miniaturaLibro(f, "mini"), csv: () => "" },
+    { clave: "numero", titulo: t("col_numero"), tipo: "num", ancho: "6%", render: (f) => (f.numero ?? "—") },
+    { clave: "titulo", titulo: t("col_titulo"), tipo: "texto", ancho: "39%",
+      render: (f) => escapar(f.titulo || t("tomo_sin_titulo")) },
+    { clave: "anio", titulo: t("col_anio"), tipo: "num", ancho: "8%" },
+    { clave: "prestamos", titulo: t("col_prestamos"), tipo: "texto", ancho: "16%",
+      render: (f) => escapar(textoPrestamo(f)), csv: textoPrestamo },
+    { clave: "estado", titulo: t("col_estado"), tipo: "texto", ancho: "26%",
+      render: (f) => {
+        const caja = crear("span", `estado-tomo ${f.estado}`, textoEstado(f));
+        return caja;
+      }, csv: textoEstado },
+  ];
+  const caja = crear("div", "tabla-desplazable tabla-serie");
+  crearTabla(caja, columnas, x.filas, { orden: null });
+  contenido.appendChild(caja);
+  if (x.huecos || x.posibles) contenido.appendChild(crear("p", "nota-pie", t("series_nota_huecos")));
+  if (x.posteriores) contenido.appendChild(crear("p", "nota-pie", t("series_nota_posteriores")));
+
+  const pie = crear("div", "pie-config");
+  const ocultar = crear("button", "enlace-discreto", t("series_ocultar"));
+  ocultar.type = "button";
+  const mensajes = crear("div");
+  pie.append(ocultar, botonCSV(`${x.nombre}.csv`, columnas, x.filas));
+  const cerrarBoton = crear("button", "boton", t("cerrar"));
+  cerrarBoton.type = "button";
+  pie.appendChild(cerrarBoton);
+  contenido.append(mensajes, pie);
+  const cerrar = abrirModal(x.nombre, contenido);
+  cerrarBoton.addEventListener("click", () => cerrar());
+  ocultar.addEventListener("click", async () => {
+    try {
+      await guardarSeriesOcultas([...(conf().series_ocultas || []), x.nombre]);
+      cerrar();
+      mostrarVista("series");
+    } catch (e) { mensajes.replaceChildren(aviso("error", e.message)); }
+  });
+}
+
+async function guardarSeriesOcultas(lista) {
+  if (estado.config.clave_configuracion && !estado.tokenAdmin && !MODO_DEMO) {
+    throw new Error(t("series_necesita_clave"));
+  }
+  const r = await API.guardarConfiguracion(estado.tokenAdmin, { series_ocultas: lista });
+  estado.config.configuracion = r.configuracion;
+}
+
+/* ==========================================================================
+   Ficha de un ejemplar del fondo propio
    ========================================================================== */
 async function verFichaSesion(recordId) {
   try {
     const ficha = await API.ficha(estado.sesion, recordId);
-    const contenido = pintarFicha(ficha);
-    // Si el ejemplar está enlazado con el catálogo de la red, también se
-    // puede valorar y comentar el propio fondo, no solo lo que falta.
-    if (ficha.id_sistema && estado.config.valoraciones && estado.config.valoraciones.activo) {
-      const hueco = crear("div");
-      contenido.appendChild(hueco);
-      abrirModal(t("ficha_titulo"), contenido);
-      montarValoraciones(hueco, ficha.id_sistema);
-      return;
-    }
-    abrirModal(t("ficha_titulo"), contenido);
+    abrirModal(t("ficha_titulo"), pintarFicha(ficha));
   } catch (e) {
     abrirModal(t("ficha_titulo"), aviso("error", e.message));
-  }
-}
-
-async function verFichaRed(idSistema) {
-  try {
-    const ficha = await API.fichaRed(idSistema);
-    const contenido = pintarFicha(ficha);
-    const hueco = crear("div");
-    contenido.appendChild(hueco);
-    abrirModal(t("ficha_titulo"), contenido);
-    montarValoraciones(hueco, idSistema);
-  } catch (e) {
-    abrirModal(t("ficha_titulo"), aviso("error", e.message));
-  }
-}
-
-/* --- Valoraciones: se cargan después de abrir la ficha para no retrasar su
-   aparición, y se vuelven a pintar tras cada cambio. --------------------- */
-async function montarValoraciones(hueco, idSistema) {
-  if (!estado.config.valoraciones || !estado.config.valoraciones.activo) return;
-
-  // Tras cada cambio se repinta el bloque y, si la pestaña «Red» está
-  // abierta debajo del modal, también su actividad.
-  const pintar = (datos) => {
-    hueco.innerHTML = "";
-    hueco.appendChild(bloqueValoracion(idSistema, datos,
-      async (cuerpo) => { pintar(await API.guardarValoracion(estado.sesion, idSistema, cuerpo)); avisarCambioRed(); },
-      async () => { pintar(await API.borrarValoracion(estado.sesion, idSistema)); avisarCambioRed(); },
-      async (idValoracion, texto) => {
-        pintar(await API.responder(estado.sesion, { id_valoracion: idValoracion, texto }));
-        avisarCambioRed();
-      },
-      async (idRespuesta) => { pintar(await API.borrarRespuesta(estado.sesion, idRespuesta)); avisarCambioRed(); }));
-  };
-
-  cargando(hueco);
-  try {
-    pintar(await API.valoraciones(estado.sesion, idSistema));
-  } catch (e) {
-    hueco.innerHTML = "";
-    hueco.appendChild(aviso("atencion", e.message));
   }
 }
 
 /* ==========================================================================
    Vista: sugerencias de compra
-   Cruza la demanda del fondo propio (uso relativo, actualidad) con la oferta
-   de la red (títulos que otras bibliotecas tienen y esta no). A la izquierda,
-   dónde comprar; a la derecha, qué comprar. Todo propone, nada retira.
+   Arriba, la demanda del fondo propio (uso relativo, actualidad): dónde
+   comprar. Abajo, qué comprar según DILVE. Todo propone, nada retira.
    ========================================================================== */
 let peticionCompras = 0;
 
@@ -1666,6 +2039,8 @@ async function vistaCompras(vista) {
   soltarMedidores();
   const c = estado.controles.compras;
   if (!c.anio_minimo) c.anio_minimo = estado.config.anio_actual - 4;   // últimos 5 años
+  const fuentes = fuentesCompra().map((f) => f.clave);
+  if (!fuentes.includes(c.fuente)) c.fuente = fuentes[0];
   const huecos = esqueletoCompras(vista);
   await refrescarCompras(huecos);
 }
@@ -1680,10 +2055,7 @@ async function refrescarCompras(huecos) {
     // actualidad) es siempre el del fondo COMPLETO, sin los filtros de esta
     // pestaña: es la referencia constante frente a la que se decide comprar.
     [datos, datosFondo] = await Promise.all([
-      API.recPanel(estado.sesion, {
-        anio_minimo: c.anio_minimo, seccion: c.seccion, idioma: c.idioma, campo: c.campo, texto: c.texto,
-        excluir_fondo: c.excluir_fondo, solo_bibliografico: c.solo_bibliografico, limite: 200,
-      }),
+      API.panelCompras(estado.sesion),
       API.buscar(estado.sesion, {
         campo: "signatura", texto: "", publico: "todo", idioma: "__TODOS__", loc: "__TODAS__",
         por_pagina: 1, ligero: true, ui: IDIOMA,
@@ -1714,66 +2086,34 @@ async function refrescarCompras(huecos) {
   // Lo único que cambia entre fuentes es la lista: el diagnóstico de arriba
   // es el mismo y sigue filtrando por sección.
   huecos.titulos.innerHTML = "";
-  if (c.fuente === "autores") pintarAutores(huecos.titulos, c, recargar);
-  else if (c.fuente === "novedades") pintarNovedades(huecos.titulos, c, recargar);
-  else pintarTitulosCompras(huecos.titulos, a, c);
+  if (c.fuente === "novedades") pintarNovedades(huecos.titulos, c, recargar);
+  else pintarAutores(huecos.titulos, c, recargar);
 }
 
-/* --- Cruce demanda propia × oferta de la red ------------------------------ */
+/* --- Demanda y actualidad de cada sección del fondo propio ----------------- */
 function prepararCompras(datos) {
   const propias = datos.propias || [];
   const volTotal = propias.reduce((s, p) => s + p.volumenes, 0);
   const prestTotal = propias.reduce((s, p) => s + p.prestados, 0);
   const tasa = volTotal ? prestTotal / volTotal : 0;
-  const oferta = Object.fromEntries(datos.secciones.map((s) => [s.clave, s]));
   const puntos = propias
     .filter((p) => p.volumenes >= MINIMO_FIABLE && p.con_anio)
     .map((p) => ({
       clave: p.clave, etiqueta: traducirEtiqueta(p.clave), volumenes: p.volumenes,
       x: (p.recientes / p.con_anio) * 100,
       y: tasa ? (p.prestados / p.volumenes) / tasa : 0,
-      oferta: oferta[p.clave] ? oferta[p.clave].candidatos : 0,
+      tamano: p.volumenes,
     }));
   const xs = puntos.map((p) => p.x).sort((a, b) => a - b);
   const corteX = xs.length ? xs[Math.floor(xs.length / 2)] : 0;
   const prioritarias = puntos.filter((p) => p.y >= 1 && p.x < corteX);
-  return { datos, puntos, corteX, prioritarias, oferta };
+  return { datos, puntos, corteX, prioritarias };
 }
 
 /* --- Filtros ---------------------------------------------------------------- */
 function pintarFiltrosCompras(barra, c, datos, recargar) {
   if (c.fuente === "novedades") return pintarFiltrosNovedades(barra, c, recargar);
-  if (c.fuente === "autores") return pintarFiltrosAutores(barra, c, recargar);
-  const anio = estado.config.anio_actual;
-  barra.appendChild(selector(t("editados_desde"), [
-    { valor: anio - 2, etiqueta: t("ultimos_n_anios", { n: 3 }) },
-    { valor: anio - 4, etiqueta: t("ultimos_n_anios", { n: 5 }) },
-    { valor: anio - 9, etiqueta: t("ultimos_n_anios", { n: 10 }) },
-  ], c.anio_minimo, (v) => { c.anio_minimo = Number(v); recargar(); }));
-  barra.appendChild(selector(t("col_idioma"),
-    [{ valor: "__TODOS__", etiqueta: t("todos_idiomas") }].concat(
-      (datos.idiomas_red || []).map((i) => ({ valor: i, etiqueta: traducirEtiqueta(i) }))),
-    c.idioma, (v) => { c.idioma = v; recargar(); }));
-  barra.appendChild(selector(t("buscar_por"), [
-    { valor: "titulo", etiqueta: t("opt_titulo") },
-    { valor: "autor", etiqueta: t("opt_autor") },
-    { valor: "materia", etiqueta: t("opt_materia") },
-  ], c.campo, (v) => { c.campo = v; if (c.texto) recargar(); }));
-  barra.appendChild(entradaTexto(t("termino"), c.texto, t("placeholder_texto"),
-    (v) => { c.texto = v.trim(); recargar(); }, "busqueda"));
-  const opciones = crear("div", "casillas-compra");
-  opciones.appendChild(casilla(t("excluir_fondo"), c.excluir_fondo, (v) => { c.excluir_fondo = v; recargar(); }));
-  opciones.appendChild(casilla(t("solo_bibliografico"), c.solo_bibliografico, (v) => { c.solo_bibliografico = v; recargar(); }));
-  barra.appendChild(opciones);
-  const migas = crear("div", "migas migas-panel");
-  if (c.seccion) {
-    migas.appendChild(crear("span", "rotulo-campo", t("seleccion_activa")));
-    migas.appendChild(miga(traducirEtiqueta(c.seccion), () => {
-      c.seccion = ""; c.aut_seccion = ""; c.nov_seccion = ""; recargar();
-    }));
-  }
-  barra.appendChild(migas);
-  if (datos.aviso) barra.appendChild(aviso("atencion", datos.aviso));
+  return pintarFiltrosAutores(barra, c, recargar);
 }
 
 // Formas del producto en ONIX (lista 150). Se enseñan con su nombre: un
@@ -1901,7 +2241,7 @@ function pintarFiltrosAutores(barra, c, recargar) {
 /* --- Indicadores ------------------------------------------------------------ */
 // Híbrido: el estado general del fondo (como en Diagnóstico) + las secciones
 // donde más falta hace comprar (propio de este panel). Es la misma cabecera
-// para las tres fuentes (presencia en la red, autores, novedades): da el
+// para las dos fuentes (autores y novedades): da el
 // contexto de la colección mientras solo cambia la lista de abajo.
 function pintarKpisCompras(huecos, a, c, aFondo) {
   const tarjetas = tarjetasResumenColeccion(aFondo);
@@ -1923,7 +2263,7 @@ function pintarMatrizCompras(hueco, a, c, recargar) {
   const textos = {
     titulo: t("matriz_titulo"), cuadrante: t("matriz_cuadrante"), ejeX: t("matriz_eje_x"),
     mediana: t("matriz_mediana", { v: pct(a.corteX) }),
-    detalle: (p) => t("matriz_detalle", { s: p.etiqueta, u: formatoUso(p.y), x: pct(p.x), n: miles(p.oferta) }),
+    detalle: (p) => t("matriz_detalle", { s: p.etiqueta, u: formatoUso(p.y), x: pct(p.x), n: miles(p.volumenes) }),
   };
   estado.clavesSeccionCompras = a.puntos.map((p) => p.clave);
   cuerpo.appendChild(grafico((ancho, alto) => graficoMatrizCompra(a.puntos, {
@@ -1934,31 +2274,10 @@ function pintarMatrizCompras(hueco, a, c, recargar) {
   }), t("matriz_titulo")));
 }
 
-/* --- Barras por sección ------------------------------------------------------
-   En «Presencia en bibliotecas», lo que ofrece la red en cada sección. En las
-   fuentes de DILVE eso no aplica: se enseñan los datos de «¿Dónde hace más
-   falta comprar?» (uso relativo y actualidad de cada sección) como barras. */
+/* --- Barras por sección: uso relativo y actualidad de cada sección (los datos
+   de «¿Dónde hace más falta comprar?») --------------------------------------- */
 function pintarSeccionesCompras(hueco, a, c, recargar) {
-  if (c.fuente === "autores" || c.fuente === "novedades") return pintarDemandaSecciones(hueco, a, c, recargar);
-  const cuerpo = cuadroPanel(hueco, t("oferta_titulo"));
-  const porClave = Object.fromEntries(a.puntos.map((p) => [p.clave, p]));
-  // Primero las prioritarias, luego el resto; dentro de cada grupo, por oferta
-  const filas = a.datos.secciones.map((s) => {
-    const p = porClave[s.clave];
-    return { clave: s.clave, etiqueta: traducirEtiqueta(s.clave), volumenes: s.candidatos, prestados: 0,
-             uso: p ? p.y : null, prioritaria: Boolean(p && a.prioritarias.includes(p)) };
-  }).sort((x, y) => (y.prioritaria - x.prioritaria) || (y.volumenes - x.volumenes));
-  if (!filas.length) { cuerpo.appendChild(crear("p", "vacio", t("sin_recomendaciones"))); return; }
-  const textos = {
-    titulo: t("oferta_titulo"), otras: (n) => t("loc_otras", { n }),
-    detalle: (f) => t("oferta_detalle", { s: f.etiqueta, n: miles(f.volumenes), u: formatoUso(f.uso) }),
-  };
-  cuerpo.appendChild(grafico((ancho, alto) => graficoBarrasUso(filas, {
-    ancho, alto, textos, seleccion: c.seccion || undefined,
-    color: (f) => (f.agregada || f.uso === null ? PALETA.gris : f.uso >= 1 ? PALETA.usoEncima : PALETA.usoDebajo),
-    texto: (f) => `${miles(f.volumenes)}${f.uso === null ? "" : ` · ${formatoUso(f.uso)}`}${f.prioritaria ? " ★" : ""}`,
-    alPulsar: (clave) => { c.seccion = clave || ""; c.aut_seccion = ""; c.nov_seccion = ""; recargar(); },
-  }), t("oferta_titulo")));
+  return pintarDemandaSecciones(hueco, a, c, recargar);
 }
 
 function pintarDemandaSecciones(hueco, a, c, recargar) {
@@ -1988,62 +2307,12 @@ function pintarDemandaSecciones(hueco, a, c, recargar) {
   cuerpo.appendChild(caja);
 }
 
-/* --- Qué comprar: títulos candidatos --------------------------------------- */
-function pintarTitulosCompras(hueco, a, c) {
-  const d = a.datos;
-  const red = d.resumen.bibliotecas_red || 1;
-  const columnas = [
-    { clave: "titulo", titulo: t("col_titulo"), ancho: "33%",
-      render: (f) => {
-        const caja = crear("span", "celda-titulo");
-        const boton = crear("button", "enlace-ficha", f.titulo || "—");
-        boton.title = t("ver_ficha");
-        boton.addEventListener("click", () => verFichaRed(f.id_sistema));
-        caja.appendChild(boton);
-        if (f.estado_fondo === "POSIBLE") caja.appendChild(distintivo(t("quiza_en_fondo"), "aviso"));
-        return caja;
-      },
-      csv: (f) => f.titulo },
-    { clave: "autor", titulo: t("col_autor"), ancho: "17%" },
-    { clave: "anio", titulo: t("col_anio"), tipo: "num", ancho: "6%" },
-  ];
-  if (!c.seccion) columnas.push({ clave: "seccion", titulo: t("col_seccion"), ancho: "15%",
-                                 render: (f) => escapar(traducirEtiqueta(f.seccion || "")), csv: (f) => f.seccion });
-  columnas.push(
-    { clave: "idioma", titulo: t("col_idioma"), ancho: "9%", render: (f) => escapar(traducirEtiqueta(f.idioma || "")),
-      csv: (f) => f.idioma },
-    { clave: "n_bibliotecas", titulo: t("col_red"), tipo: "num", ancho: "11%",
-      render: (f) => {
-        const caja = crear("span", "barra-red");
-        const pista = crear("span", "pista");
-        const barra = crear("span", "relleno");
-        barra.style.width = `${Math.min(100, ((f.n_bibliotecas || 0) / red) * 100)}%`;
-        pista.appendChild(barra);
-        caja.append(pista, crear("span", "cifra-red", miles(f.n_bibliotecas)));
-        caja.title = t("en_n_bibliotecas", { n: miles(f.n_bibliotecas), t: miles(red) });
-        return caja;
-      } },
-    { clave: "valoracion_media", titulo: t("col_valoracion"), tipo: "num", ancho: "10%",
-      render: (f) => (f.valoracion_n ? `${decimal(f.valoracion_media, 1)} (${f.valoracion_n})` : "—"),
-      csv: (f) => f.valoracion_media },
-  );
-  const titulo = c.seccion ? t("titulos_de", { s: traducirEtiqueta(c.seccion) }) : t("titulos_recomendados");
-  const sub = d.total > d.filas.length ? t("mostrando_n_de", { n: miles(d.filas.length), t: miles(d.total) })
-    : t("titulos_recomendados_sub", { n: miles(d.total) });
-  const cuerpo = cuadroPanel(hueco, titulo, sub,
-    d.filas.length ? botonCSV("sugerencias_compra.csv", columnas, d.filas) : null);
-  const caja = crear("div", "tabla-desplazable tabla-titulos");
-  crearTabla(caja, columnas, d.filas, { textoVacio: t("sin_recomendaciones") });
-  cuerpo.appendChild(caja);
-}
-
 /* ==========================================================================
-   Sugerencias de compra: tres fuentes, un mismo diagnóstico
+   Sugerencias de compra: dos fuentes, un mismo diagnóstico
    La banda de arriba (indicadores, matriz «¿Dónde hace más falta comprar?» y
-   oferta por sección) es idéntica en las tres fuentes y sirve de filtro:
+   demanda por sección) es idéntica en las dos fuentes y sirve de filtro:
    pulsar una sección filtra la lista de abajo. Lo único que cambia es la
-   lista y, en su caso, los filtros:
-     presencia  títulos que tiene la red y esta biblioteca no (tabla)
+   lista y sus filtros:
      autores    obras del mismo autor de lo más prestado (lista con portada)
      novedades  altas recientes de DILVE (rejilla de portadas)
    ========================================================================== */
@@ -2122,14 +2391,13 @@ function seccionFiltroDilve(c, campo) {
 }
 
 function fuentesCompra() {
-  const s = (estado.config.red && estado.config.red.sugerencias) || {};
+  const s = conf().sugerencias || {};
   // «Autores» necesita credenciales de DILVE para pedir fichas; «Novedades»,
   // que haya novedades descargadas. La casilla «activo» solo rige la descarga
   // automática semanal, así que no esconde las fuentes.
   const credenciales = Boolean(estado.config.dilve_credenciales || estado.config.dilve_activo);
   const hayNovedades = (estado.config.dilve_novedades || 0) > 0;
   return [
-    { clave: "presencia", etiqueta: "fuente_presencia", disponible: s.presencia !== false && estado.config.recomendaciones_activas },
     { clave: "autores", etiqueta: "fuente_autores", disponible: s.autores !== false && credenciales },
     { clave: "novedades", etiqueta: "fuente_novedades", disponible: s.novedades !== false && (hayNovedades || credenciales) },
   ].filter((f) => f.disponible);
@@ -2188,8 +2456,31 @@ async function pintarAutores(hueco, c, recargar) {
   if (seccion) filas = filas.filter((f) => seccionesLibro(f).includes(seccion));
   // Sin notas de contexto fijas: solo el aviso si el cálculo se interrumpió
   if (d.interrupcion) cuerpo.appendChild(aviso("atencion", d.interrupcion));
-  cuerpo.appendChild(listaLibros(filas, c, { motivo: (f) => t("aut_porque", {
-    o: f.origen_titulo || "", n: miles(f.prestamos_origen || 0) }) }));
+  cuerpo.appendChild(listaLibros(filas, c, { motivo: motivoAutor }));
+}
+
+// «CASTILLO, Javier (1987-)» → «Javier Castillo», como se lee
+function nombreLegible(autor) {
+  const sinFechas = String(autor || "").replace(/\([^)]*\)/g, "").trim();
+  const [apellidos, nombre] = sinFechas.split(/\s*,\s*/);
+  const suavizar = (texto) => (texto === texto.toUpperCase()
+    ? texto.toLowerCase().replace(/(^|[\s'-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase())
+           .replace(/(^|\s)(De|Del|La|Las|Los|Y|I|E)(?=\s)/g, (m, a, p) => a + p.toLowerCase())
+    : texto);
+  return nombre ? `${nombre} ${suavizar(apellidos)}`.trim() : suavizar(apellidos || "");
+}
+
+// Por qué se propone: el autor con todos sus libros del fondo
+function motivoAutor(f) {
+  if (f.autor_titulos === undefined) {            // resultado guardado por una versión anterior
+    return t("aut_porque", { o: f.origen_titulo || "", n: miles(f.prestamos_origen || 0) });
+  }
+  const conjunto = t("aut_porque_autor", {
+    a: nombreLegible(f.autor_origen || f.autor), t: miles(f.autor_titulos), p: miles(f.autor_prestados),
+    e: miles(f.autor_ejemplares), n: miles(f.autor_prestamos) });
+  return f.origen_titulo && f.origen_prestamos
+    ? `${conjunto} ${t("aut_porque_mas_prestado", { o: f.origen_titulo, m: miles(f.origen_prestamos) })}`
+    : conjunto;
 }
 
 /* --- Lista: novedades ------------------------------------------------------- */
@@ -2606,212 +2897,31 @@ function cerrarCajonLibro() {
 }
 
 /* ==========================================================================
-   Vista: red
-   Lo que las bibliotecas se cuentan sobre los libros: actividad reciente,
-   mejor valorados y más comentados. Cada biblioteca firma con su nombre; no
-   hay usuarios ni datos personales. Se comentan libros, no personas.
-   ========================================================================== */
-let peticionRed = 0;
-let refrescoRedPendiente = null;
-
-// Lo llama la ficha tras guardar, borrar o responder: si la pestaña «Red»
-// está abierta, su actividad se actualiza sin tener que salir y volver.
-function avisarCambioRed() {
-  if (estado.vista !== "red" || !estado.huecosRed) return;
-  clearTimeout(refrescoRedPendiente);
-  refrescoRedPendiente = setTimeout(() => refrescarRed(estado.huecosRed).catch(() => {}), 150);
-}
-
-function esqueletoRed(vista) {
-  vista.innerHTML = "";
-  const raiz = crear("div", "panel-secciones panel-red");
-  const filtros = crear("div", "barra-superior barra-panel");
-  const rejilla = crear("div", "rejilla-red");
-  const huecos = { raiz, filtros, rejilla, kpis: [] };
-  for (let i = 0; i < 4; i++) {
-    const h = crear("div", "hueco-indicador col-3");
-    rejilla.appendChild(h);
-    huecos.kpis.push(h);
-  }
-  const hueco = (clase) => { const h = crear("div", `hueco ${clase}`); rejilla.appendChild(h); return h; };
-  huecos.actividad = hueco("zona-actividad");
-  huecos.mejores = hueco("zona-mejores");
-  huecos.comentados = hueco("zona-comentados");
-  raiz.append(filtros, rejilla);
-  vista.appendChild(raiz);
-  return huecos;
-}
-
-async function vistaRed(vista) {
-  soltarMedidores();
-  estado.huecosRed = esqueletoRed(vista);
-  await refrescarRed(estado.huecosRed);
-}
-
-async function refrescarRed(huecos) {
-  const c = estado.controles.red;
-  const numero = ++peticionRed;
-  huecos.rejilla.classList.add("actualizando");
-  let datos;
-  try {
-    datos = await API.red(estado.sesion, { filtro: c.filtro, limite: 80 });
-  } finally {
-    if (numero === peticionRed) huecos.rejilla.classList.remove("actualizando");
-  }
-  if (numero !== peticionRed || !huecos.raiz.isConnected) return;
-  const recargar = () => refrescarRed(huecos).catch((e) => huecos.filtros.after(aviso("error", e.message)));
-
-  pintarBarraRed(huecos.filtros, datos, c, recargar);
-  pintarKpisRed(huecos.kpis, datos);
-  pintarActividadRed(huecos.actividad, datos, c);
-  pintarRankingRed(huecos.mejores, t("red_mejores"), t("red_mejores_sub"), datos.mejor_valorados, (f) => {
-    const caja = crear("span", "valor-ranking");
-    caja.append(estrellas(Math.round(f.media)), crear("span", null, `${decimal(f.media, 1)} (${f.n_puntuaciones})`));
-    return caja;
-  });
-  pintarRankingRed(huecos.comentados, t("red_comentados"), t("red_comentados_sub"), datos.mas_comentados,
-    (f) => crear("span", "valor-ranking", t("red_conversacion", { c: f.comentarios, r: f.respuestas })));
-}
-
-/* --- Barra: qué actividad ver y normas de uso ----------------------------- */
-function pintarBarraRed(barra, datos, c, recargar) {
-  barra.innerHTML = "";
-  const grupo = crear("div", "conmutador conmutador-red");
-  grupo.setAttribute("role", "group");
-  grupo.setAttribute("aria-label", t("red_ver"));
-  [["todo", t("red_filtro_todo")],
-   ["a_mi", t("red_filtro_a_mi", { n: datos.respuestas_a_mi })],
-   ["mia", t("red_filtro_mia")]].forEach(([valor, texto]) => {
-    const b = crear("button", valor === c.filtro ? "activo" : "", texto);
-    b.setAttribute("aria-pressed", String(valor === c.filtro));
-    b.addEventListener("click", () => { if (c.filtro !== valor) { c.filtro = valor; recargar(); } });
-    grupo.appendChild(b);
-  });
-  barra.appendChild(grupo);
-  barra.appendChild(crear("p", "normas-uso normas-barra", t("normas_uso")));
-  if (!datos.disponible) barra.appendChild(aviso("atencion", datos.error || t("valoraciones_desactivadas")));
-}
-
-/* --- Indicadores de participación ----------------------------------------- */
-function pintarKpisRed(huecos, d) {
-  const e = d.estadisticas;
-  const tarjetas = [
-    tarjetaIndicador({ rotulo: t("red_bibliotecas"), valor: miles(e.bibliotecas), acento: PALETA.cian,
-      unidad: d.bibliotecas_red ? t("de_n_bibliotecas", { n: miles(d.bibliotecas_red) }) : null,
-      grafico: d.bibliotecas_red ? graficoBala({ valor: e.bibliotecas, escala: d.bibliotecas_red, color: PALETA.cian }) : null,
-      contexto: t("red_bibliotecas_ctx") }),
-    tarjetaIndicador({ rotulo: t("red_titulos"), valor: miles(e.titulos), acento: PALETA.violeta,
-      contexto: t("red_titulos_ctx", { n: miles(e.valoraciones) }) }),
-    tarjetaIndicador({ rotulo: t("red_conversaciones"), valor: miles(e.comentarios + e.respuestas), acento: PALETA.ambar,
-      contexto: t("red_conversaciones_ctx", { c: miles(e.comentarios), r: miles(e.respuestas) }) }),
-    tarjetaIndicador({ rotulo: t("red_a_mi"), valor: miles(d.respuestas_a_mi), acento: PALETA.verde,
-      contexto: t("red_reciente_ctx", { n: miles(e.actividad_reciente) }) }),
-  ];
-  tarjetas.forEach((tarjeta, i) => huecos[i].replaceChildren(tarjeta));
-}
-
-/* --- Actividad reciente ---------------------------------------------------- */
-function botonTitulo(f) {
-  const b = crear("button", "enlace-ficha", f.titulo || f.id_sistema);
-  b.title = t("ver_ficha_y_conversacion");
-  b.addEventListener("click", () => verFichaRed(f.id_sistema));
-  return b;
-}
-
-function pintarActividadRed(hueco, d, c) {
-  const subtitulos = { todo: t("red_actividad_sub"), a_mi: t("red_actividad_a_mi_sub"), mia: t("red_actividad_mia_sub") };
-  const cuerpo = cuadroPanel(hueco, t("red_actividad"), subtitulos[c.filtro]);
-  const lista = crear("ol", "actividad");
-  if (!d.actividad.length) {
-    cuerpo.appendChild(crear("p", "vacio", t(c.filtro === "todo" ? "red_sin_actividad" : "red_sin_actividad_filtro")));
-    return;
-  }
-  d.actividad.forEach((f) => {
-    const li = crear("li", `evento ${f.tipo}${f.biblioteca === d.biblioteca ? " propio" : ""}`);
-    const cabeza = crear("div", "cabeza-evento");
-    cabeza.appendChild(crear("span", "quien", f.biblioteca));
-    cabeza.appendChild(crear("span", "accion", f.tipo === "respuesta"
-      ? t("red_respondio", { n: f.destino }) : f.texto ? t("red_comento") : t("red_valoro")));
-    const cuando = crear("time", "cuando", fechaRelativa(f.fecha));
-    cuando.dateTime = f.fecha;
-    cuando.title = fechaCorta(f.fecha);
-    cabeza.appendChild(cuando);
-    li.appendChild(cabeza);
-    const linea = crear("div", "titulo-evento");
-    linea.appendChild(botonTitulo(f));
-    if (f.autor) linea.appendChild(crear("span", "autor-evento", f.autor));
-    if (f.en_fondo) linea.appendChild(distintivo(t("en_tu_fondo"), "frio"));
-    if (f.puntuacion) linea.appendChild(estrellas(f.puntuacion));
-    li.appendChild(linea);
-    if (f.texto) li.appendChild(crear("p", "texto-evento", f.texto));   // textContent vía crear
-    lista.appendChild(li);
-  });
-  const desplazable = crear("div", "lista-desplazable");
-  desplazable.appendChild(lista);
-  cuerpo.appendChild(desplazable);
-}
-
-/* --- Rankings -------------------------------------------------------------- */
-function pintarRankingRed(hueco, titulo, subtitulo, filas, valor) {
-  const cuerpo = cuadroPanel(hueco, titulo, subtitulo);
-  if (!filas.length) { cuerpo.appendChild(crear("p", "vacio", t("red_ranking_vacio"))); return; }
-  const lista = crear("ol", "ranking");
-  filas.forEach((f, i) => {
-    const li = crear("li");
-    li.appendChild(crear("span", "posicion-ranking", String(i + 1)));
-    const texto = crear("span", "texto-ranking");
-    texto.appendChild(botonTitulo(f));
-    const pie = crear("span", "autor-evento", f.autor || "");
-    if (f.en_fondo) pie.appendChild(distintivo(t("en_tu_fondo"), "frio"));
-    texto.appendChild(pie);
-    li.append(texto, valor(f));
-    lista.appendChild(li);
-  });
-  const desplazable = crear("div", "lista-desplazable");
-  desplazable.appendChild(lista);
-  cuerpo.appendChild(desplazable);
-}
-
-/* ==========================================================================
-   Configuración de la biblioteca
-   Tema, paleta de los gráficos, pestañas visibles y pestaña de inicio. Se
-   guarda en el navegador (para aplicarse desde la primera pantalla) y, con
-   una sesión abierta, en el servidor para esa biblioteca (para que sea la
-   misma en todos sus ordenadores).
+   Configuración
+   Una sola, la de la biblioteca: sus datos, la apariencia, las pestañas, el
+   historial, la tabla de signaturas y DILVE. Se guarda en el servidor
+   (datos/configuracion.json); la apariencia, también en el navegador, para
+   aplicarla desde la primera pantalla. Si la instalación tiene clave
+   (CLAVE_ADMIN), se pide antes de abrirla.
    ========================================================================== */
 const CLAVE_PREFERENCIAS = "bildumargi.preferencias";
 const PREFS_DEFECTO = { tema: "oscuro", paleta: "okabe", pestanas_ocultas: [], inicio: "diagnostico", idioma: null };
 
-// Valores de partida de una biblioteca: los de la red, si los ha fijado.
-function prefsDefecto() {
-  const red = configRed();
-  return { ...PREFS_DEFECTO, tema: red.tema_defecto || PREFS_DEFECTO.tema,
-           paleta: red.paleta_defecto || PREFS_DEFECTO.paleta, pestanas_ocultas: [] };
+// Lo que hace falta para pintar: apariencia, idioma y pestañas.
+function prefsDe(c) {
+  return { tema: c.tema || PREFS_DEFECTO.tema, paleta: c.paleta || PREFS_DEFECTO.paleta, idioma: c.idioma || null,
+           pestanas_ocultas: [...(c.pestanas_ocultas || [])], inicio: c.inicio || PREFS_DEFECTO.inicio };
 }
 
 function preferenciasLocales() {
   try {
     const guardadas = JSON.parse(localStorage.getItem(CLAVE_PREFERENCIAS));
-    return guardadas ? { ...prefsDefecto(), ...guardadas, _guardadas: true } : { ...prefsDefecto() };
-  } catch { return { ...prefsDefecto() }; }
+    return guardadas ? { ...PREFS_DEFECTO, ...guardadas } : { ...PREFS_DEFECTO };
+  } catch { return { ...PREFS_DEFECTO }; }
 }
 
 function guardarPreferenciasLocales(prefs) {
   try { localStorage.setItem(CLAVE_PREFERENCIAS, JSON.stringify(prefs)); } catch { /* navegador sin almacenamiento */ }
-}
-
-async function cargarPreferenciasBiblioteca() {
-  try {
-    const r = await API.preferencias(estado.sesion);
-    estado.prefsServidor = r;
-    if (r.preferencias) {
-      estado.preferencias = { ...PREFS_DEFECTO, ...r.preferencias };
-      guardarPreferenciasLocales(estado.preferencias);
-      aplicarApariencia(estado.preferencias);
-      const idioma = idiomaPreferido();
-      if (idioma !== IDIOMA) aplicarIdioma(idioma);   // la vista se pinta después, ya traducida
-    }
-  } catch { /* sin preferencias en el servidor: se quedan las del navegador */ }
 }
 
 function vistaInicial() {
@@ -2866,22 +2976,110 @@ function grupoOpciones(opciones, valor, alElegir) {
   return grupo;
 }
 
-// `inicial`: valores con los que abrir el panel (Restablecer lo reabre con
-// los de por defecto). Lo guardado sigue siendo `estado.preferencias` hasta
-// que se pulsa Guardar; cerrar sin guardar vuelve a ello.
-function abrirConfiguracion(inicial) {
-  const original = { ...estado.preferencias, pestanas_ocultas: [...estado.preferencias.pestanas_ocultas] };
-  const base = inicial && inicial.tema ? inicial : original;
-  const borrador = { ...base, pestanas_ocultas: [...base.pestanas_ocultas] };
+function abrirConfiguracion(apartado) {
+  if (apartado) estado.apartadoConfig = apartado;
+  if (estado.config.clave_configuracion && !estado.tokenAdmin && !MODO_DEMO) return pedirClaveConfiguracion();
+  return formularioConfiguracion();
+}
+
+// Solo en instalaciones con clave (CLAVE_ADMIN). El acceso dura dos horas.
+function pedirClaveConfiguracion(error) {
+  const contenido = crear("div", "config admin");
+  contenido.appendChild(crear("p", "ayuda-config", t("config_clave_intro")));
+  const campo = crear("label", "campo");
+  const entrada = crear("input");
+  entrada.type = "password";
+  entrada.autocomplete = "current-password";
+  campo.append(crear("span", "rotulo-campo", t("admin_clave")), entrada);
+  contenido.appendChild(campo);
+  if (error) contenido.appendChild(aviso("error", error));
+  // No hay recuperación de clave por correo: si se olvida, se pone otra.
+  contenido.appendChild(crear("p", "ayuda-config", t("admin_olvido")));
+  const pie = crear("div", "pie-config");
+  const entrar = crear("button", "boton", t("admin_entrar"));
+  const cancelar = crear("button", "boton secundario", t("cancelar"));
+  pie.append(cancelar, entrar);
+  contenido.appendChild(pie);
+  const cerrar = abrirModal(t("configuracion"), contenido);
+  cancelar.addEventListener("click", () => cerrar());
+  const enviar = async () => {
+    entrar.disabled = true;
+    try {
+      const r = await API.adminEntrar(entrada.value);
+      estado.tokenAdmin = r.token;
+      cerrar();
+      formularioConfiguracion();
+    } catch (e) {
+      cerrar();
+      pedirClaveConfiguracion(e.message);
+    }
+  };
+  entrar.addEventListener("click", enviar);
+  entrada.addEventListener("keydown", (e) => { if (e.key === "Enter") enviar(); });
+  entrada.focus();
+}
+
+// `inicial`: valores con los que abrir el panel (Restablecer lo reabre con la
+// apariencia por defecto). Lo guardado sigue siendo la configuración del
+// servidor hasta que se pulsa Guardar; cerrar sin guardar deshace la vista previa.
+function formularioConfiguracion(inicial) {
+  const original = prefsDe(conf());
+  const borrador = JSON.parse(JSON.stringify(inicial || conf()));
+  borrador.biblioteca = borrador.biblioteca || {};
+  borrador.pestanas_ocultas = borrador.pestanas_ocultas || [];
   let guardado = false;
   const contenido = crear("div", "config");
 
-  const previsualizar = () => { aplicarApariencia(borrador); repintarVista(); };
+  const previsualizar = () => { aplicarApariencia(prefsDe(borrador)); repintarVista(); };
+
+  // --- La biblioteca: nombre, población, superficie y sucursal
+  const b = borrador.biblioteca;
+  const fsBib = crear("fieldset");
+  fsBib.appendChild(crear("legend", null, t("config_biblioteca")));
+  fsBib.appendChild(crear("p", "ayuda-config", t("config_biblioteca_ayuda")));
+  const filaBib = crear("div", "fila-admin");
+  const campoNombre = crear("label", "campo ancho");
+  const nombre = crear("input");
+  nombre.type = "text";
+  nombre.maxLength = 120;
+  nombre.value = b.nombre || "";
+  nombre.placeholder = t("biblioteca_sin_nombre");
+  nombre.addEventListener("input", () => { b.nombre = nombre.value; });
+  campoNombre.append(crear("span", "rotulo-campo", t("config_nombre")), nombre);
+  filaBib.appendChild(campoNombre);
+  const campoRed = crear("label", "campo ancho");
+  const red = crear("input");
+  red.type = "text";
+  red.maxLength = 120;
+  red.value = b.red ?? estado.config.nombre_red ?? "";
+  red.placeholder = t("config_red_ejemplo");
+  red.addEventListener("input", () => { b.red = red.value; });
+  campoRed.append(crear("span", "rotulo-campo", t("config_red")), red);
+  filaBib.appendChild(campoRed);
+  filaBib.appendChild(entradaNumero(t("config_poblacion"), b.poblacion ?? "",
+    (v) => { b.poblacion = v; }, { min: 0, max: 50000000 }));
+  filaBib.appendChild(entradaNumero(t("config_metros"), b.metros ?? "",
+    (v) => { b.metros = v; }, { min: 0, max: 1000000 }));
+  fsBib.appendChild(filaBib);
+  const sucursal = crear("p", "ayuda-config");
+  const pintarSucursal = () => {
+    sucursal.innerHTML = "";
+    if (b.olvidar_sucursal) { sucursal.textContent = t("config_sucursal_olvidada"); return; }
+    if (b.sucursal == null) { sucursal.textContent = t("config_sucursal_pendiente"); return; }
+    sucursal.append(t("config_sucursal", { s: b.sucursal }), " ");
+    const olvidar = crear("button", "enlace-discreto", t("config_olvidar_sucursal"));
+    olvidar.type = "button";
+    olvidar.addEventListener("click", () => { b.olvidar_sucursal = true; pintarSucursal(); });
+    sucursal.appendChild(olvidar);
+  };
+  pintarSucursal();
+  fsBib.appendChild(sucursal);
+  contenido.appendChild(fsBib);
 
   // --- Idioma de la interfaz
   const fsIdioma = crear("fieldset");
   fsIdioma.appendChild(crear("legend", null, t("config_idioma")));
-  fsIdioma.appendChild(grupoOpciones(idiomasPermitidos().map((i) => ({
+  fsIdioma.appendChild(grupoOpciones(IDIOMAS_INTERFAZ.map((i) => ({
     valor: i.codigo, nombre: i.nombre, muestra: crear("span", "muestra-idioma", i.codigo.toUpperCase()),
   })), borrador.idioma || idiomaPreferido(), (v) => { borrador.idioma = v; }));
   contenido.appendChild(fsIdioma);
@@ -2909,8 +3107,8 @@ function abrirConfiguracion(inicial) {
     const uso = crear("span", "muestra-uso");
     uso.style.marginTop = "5px";
     const a = crear("span"); a.style.background = p.encima;
-    const b = crear("span"); b.style.background = p.debajo;
-    uso.append(a, b);
+    const d = crear("span"); d.style.background = p.debajo;
+    uso.append(a, d);
     caja.append(escala, uso);
     return caja;
   };
@@ -2925,34 +3123,34 @@ function abrirConfiguracion(inicial) {
   fsPestanas.appendChild(crear("p", "ayuda-config", t("config_pestanas_ayuda")));
   const lista = crear("div", "lista-pestanas");
   const posibles = seccionesPosibles();
-  const disponibles = new Set(posibles.filter((s) => s.disponible).map((s) => s.clave));
+  const disponibles = new Set(posibles.filter((x) => x.disponible).map((x) => x.clave));
   const selectorInicio = crear("select");
   const pintarInicio = () => {
     selectorInicio.innerHTML = "";
-    posibles.filter((s) => disponibles.has(s.clave) && !borrador.pestanas_ocultas.includes(s.clave)).forEach((s) => {
-      const o = crear("option", null, t(s.etiqueta));
-      o.value = s.clave;
-      o.selected = s.clave === borrador.inicio;
+    posibles.filter((x) => disponibles.has(x.clave) && !borrador.pestanas_ocultas.includes(x.clave)).forEach((x) => {
+      const o = crear("option", null, t(x.etiqueta));
+      o.value = x.clave;
+      o.selected = x.clave === borrador.inicio;
       selectorInicio.appendChild(o);
     });
     if (!selectorInicio.value && selectorInicio.options.length) selectorInicio.selectedIndex = 0;
     borrador.inicio = selectorInicio.value;
   };
-  posibles.forEach((s) => {
-    const etiqueta = crear("label", disponibles.has(s.clave) ? "" : "no-disponible");
+  posibles.forEach((x) => {
+    const etiqueta = crear("label", disponibles.has(x.clave) ? "" : "no-disponible");
     const casillaP = crear("input");
     casillaP.type = "checkbox";
-    casillaP.checked = !borrador.pestanas_ocultas.includes(s.clave);
+    casillaP.checked = !borrador.pestanas_ocultas.includes(x.clave);
     casillaP.addEventListener("change", () => {
       const ocultas = new Set(borrador.pestanas_ocultas);
-      if (casillaP.checked) ocultas.delete(s.clave); else ocultas.add(s.clave);
+      if (casillaP.checked) ocultas.delete(x.clave); else ocultas.add(x.clave);
       borrador.pestanas_ocultas = posibles.map((p) => p.clave).filter((c) => ocultas.has(c));
       pintarInicio();
     });
-    etiqueta.append(casillaP, document.createTextNode(t(s.etiqueta)));
-    if (!disponibles.has(s.clave)) {
+    etiqueta.append(casillaP, document.createTextNode(t(x.etiqueta)));
+    if (!disponibles.has(x.clave)) {
       casillaP.disabled = true;
-      etiqueta.appendChild(crear("small", null, ` · ${t(s.motivo || "config_no_disponible")}`));
+      etiqueta.appendChild(crear("small", null, ` · ${t(x.motivo || "config_no_disponible")}`));
     }
     lista.appendChild(etiqueta);
   });
@@ -2964,93 +3162,237 @@ function abrirConfiguracion(inicial) {
   fsPestanas.appendChild(campoInicio);
   contenido.appendChild(fsPestanas);
 
-  // --- Secciones por signatura (solo con una biblioteca abierta)
-  let editorSig = null;
-  if (estado.sesion) {
-    const fsSig = crear("fieldset");
-    fsSig.appendChild(crear("legend", null, t("sig_titulo")));
-    fsSig.appendChild(crear("p", "ayuda-config", t("sig_ayuda")));
-    const huecoSig = crear("div");
-    cargando(huecoSig);
-    fsSig.appendChild(huecoSig);
-    contenido.appendChild(fsSig);
-    API.signaturas(estado.sesion).then((d) => {
-      huecoSig.innerHTML = "";
-      huecoSig.appendChild(crear("p", "nota-pie", t(`sig_origen_${d.origen}`)));
-      const restaurar = d.red || (estado.config && estado.config.signaturas_defecto) || [];
-      editorSig = editorSignaturas(d.reglas, restaurar, t(d.red ? "sig_restaurar_red" : "sig_restaurar"));
-      huecoSig.appendChild(editorSig.nodo);
-    }).catch((e) => { huecoSig.replaceChildren(aviso("error", e.message)); });
+  // --- Historial de cargas
+  const fsHist = crear("fieldset");
+  fsHist.appendChild(crear("legend", null, t("admin_historial")));
+  fsHist.appendChild(crear("p", "ayuda-config", t("admin_historial_ayuda")));
+  const filaH = crear("div", "fila-admin");
+  filaH.appendChild(casilla(t("admin_historial_activo"), borrador.historial, (v) => { borrador.historial = v; }));
+  filaH.appendChild(entradaNumero(t("admin_max_cargas"), borrador.max_cargas,
+    (v) => { borrador.max_cargas = v; }, { min: 1, max: 60 }));
+  fsHist.appendChild(filaH);
+  contenido.appendChild(fsHist);
+
+  // --- Secciones por signatura
+  const fsSig = crear("fieldset");
+  fsSig.appendChild(crear("legend", null, t("sig_titulo")));
+  fsSig.appendChild(crear("p", "ayuda-config", t("sig_ayuda")));
+  const defecto = (estado.config && estado.config.signaturas_defecto) || [];
+  const editorSig = editorSignaturas(borrador.signaturas || defecto, defecto, t("sig_restaurar"));
+  fsSig.appendChild(editorSig.nodo);
+  contenido.appendChild(fsSig);
+
+  // --- DILVE: cuenta y novedades
+  const fsDilve = borrador.dilve ? seccionDilve(borrador) : null;
+
+  // --- Descargar las fichas de todo el catálogo (con un análisis abierto)
+  let fsCat = null;
+  if (estado.sesion && !MODO_DEMO) {
+    fsCat = crear("div", "descarga-catalogo");
+    montarDescargaCatalogo(fsCat, null);
   }
+
+  // --- Catálogo MARC: idioma de los ejemplares (se extrae al momento)
+  const fsMarc = crear("fieldset");
+  fsMarc.appendChild(crear("legend", null, t("marc_titulo")));
+  fsMarc.appendChild(crear("p", "ayuda-config", t("marc_ayuda")));
+  const campoRuta = crear("label", "campo ancho");
+  const ruta = crear("input");
+  ruta.type = "text";
+  ruta.placeholder = t("marc_ruta_ejemplo");
+  ruta.value = (conf().marc && conf().marc.ruta) || "";
+  campoRuta.append(crear("span", "rotulo-campo", t("marc_ruta")), ruta);
+  fsMarc.appendChild(campoRuta);
+  const accionesMarc = crear("div", "fila-admin");
+  const extraer = crear("button", "boton secundario", t("marc_extraer"));
+  extraer.type = "button";
+  const quitarMarc = crear("button", "enlace-discreto", t("marc_quitar"));
+  quitarMarc.type = "button";
+  accionesMarc.append(extraer, quitarMarc);
+  fsMarc.appendChild(accionesMarc);
+  const estadoMarc = crear("div", "estado-marc");
+  fsMarc.appendChild(estadoMarc);
+  fsMarc.appendChild(crear("p", "ayuda-config", t("marc_conversor")));
+  const pintarMarc = (d, mensaje) => {
+    estadoMarc.innerHTML = "";
+    if (mensaje) estadoMarc.appendChild(mensaje);
+    const e = d && d.extraccion;
+    quitarMarc.hidden = !e;
+    if (!e) { estadoMarc.appendChild(crear("p", "nota-pie", t("marc_sin_extraer"))); return; }
+    estadoMarc.appendChild(crear("p", "nota-pie", t("marc_estado", {
+      n: miles(e.ejemplares || 0), b: e.bibliotecas || "—", f: fechaCorta(e.extraido), o: fechaCorta(e.fecha_origen) })));
+    if (e.desactualizado) estadoMarc.appendChild(aviso("atencion", t("marc_desactualizado")));
+    if (e.origen_no_encontrado) estadoMarc.appendChild(aviso("info", t("marc_origen_no_encontrado")));
+  };
+  if (!estado.sesion) { extraer.disabled = true; extraer.title = t("marc_necesita_analisis"); }
+  extraer.addEventListener("click", async () => {
+    if (!ruta.value.trim()) { pintarMarc(null, aviso("atencion", t("marc_falta_ruta"))); return; }
+    extraer.disabled = true;
+    extraer.textContent = t("marc_extrayendo");
+    try {
+      const d = await API.marcExtraer(estado.sesion, estado.tokenAdmin, ruta.value.trim());
+      pintarMarc(d, d.idiomas ? aviso("ok", textoCobertura(d.idiomas)) : null);
+      estado.config.configuracion.marc = { ruta: ruta.value.trim() };
+      borrador.marc = { ruta: ruta.value.trim() };
+      await refrescarTrasCatalogo();
+    } catch (e) {
+      API.marc().then((d) => pintarMarc(d, aviso("error", e.message))).catch(() => {});
+    } finally {
+      extraer.disabled = !estado.sesion;
+      extraer.textContent = t("marc_extraer");
+    }
+  });
+  quitarMarc.addEventListener("click", async () => {
+    try { pintarMarc(await API.marcQuitar(estado.tokenAdmin)); await refrescarTrasCatalogo(); }
+    catch (e) { estadoMarc.prepend(aviso("error", e.message)); }
+  });
+  API.marc().then((d) => pintarMarc(d)).catch(() => {});
+
+  // --- Series ocultas (se guardan al momento)
+  const fsSeries = crear("fieldset");
+  fsSeries.appendChild(crear("legend", null, t("config_series")));
+  fsSeries.appendChild(crear("p", "ayuda-config", t("series_ocultas_ayuda")));
+  const listaOcultas = crear("ul", "lista-ocultas");
+  const pintarOcultas = () => {
+    listaOcultas.innerHTML = "";
+    const ocultas = conf().series_ocultas || [];
+    if (!ocultas.length) listaOcultas.appendChild(crear("li", "vacio", t("series_ninguna_oculta")));
+    ocultas.forEach((nombre) => {
+      const li = crear("li");
+      li.appendChild(crear("span", null, nombre));
+      const mostrar = crear("button", "enlace-discreto", t("series_mostrar"));
+      mostrar.type = "button";
+      mostrar.addEventListener("click", async () => {
+        try {
+          await guardarSeriesOcultas(ocultas.filter((n) => n !== nombre));
+          pintarOcultas();
+          if (estado.vista === "series") mostrarVista("series");
+        } catch (e) { listaOcultas.appendChild(aviso("error", e.message)); }
+      });
+      li.appendChild(mostrar);
+      listaOcultas.appendChild(li);
+    });
+  };
+  pintarOcultas();
+  fsSeries.appendChild(listaOcultas);
+
+  // Menú lateral: un apartado a la vista cada vez, todo ordenado
+  const apartados = [
+    ["biblioteca", t("config_biblioteca"), [fsBib]],
+    ["apariencia", t("config_apariencia"), [fsIdioma, fsTema, fsPaleta]],
+    ["pestanas", t("config_pestanas"), [fsPestanas]],
+    ["historial", t("admin_historial"), [fsHist]],
+    ["signaturas", t("sig_titulo"), [fsSig]],
+    fsDilve ? ["dilve", t("dilve_titulo"), [fsDilve]] : null,
+    fsCat ? ["catalogo", t("cat_titulo"), [fsCat]] : null,
+    ["marc", t("marc_titulo"), [fsMarc]],
+    ["series", t("config_series"), [fsSeries]],
+  ].filter(Boolean);
+  const marco = crear("div", "config-marco");
+  const menu = crear("nav", "menu-config");
+  menu.setAttribute("aria-label", t("configuracion"));
+  const paneles = crear("div", "paneles-config");
+  const activo = apartados.some(([c]) => c === estado.apartadoConfig) ? estado.apartadoConfig : apartados[0][0];
+  const botones = [];
+  apartados.forEach(([clave, titulo, nodos]) => {
+    const panelApartado = crear("section", "panel-config");
+    panelApartado.dataset.apartado = clave;
+    nodos.forEach((n) => panelApartado.appendChild(n));     // los mueve aquí
+    panelApartado.hidden = clave !== activo;
+    paneles.appendChild(panelApartado);
+    const b = crear("button", clave === activo ? "activo" : "", titulo);
+    b.type = "button";
+    b.setAttribute("aria-current", String(clave === activo));
+    b.addEventListener("click", () => {
+      estado.apartadoConfig = clave;
+      botones.forEach((x) => { x.classList.toggle("activo", x === b); x.setAttribute("aria-current", String(x === b)); });
+      paneles.querySelectorAll(".panel-config").forEach((p) => { p.hidden = p.dataset.apartado !== clave; });
+      paneles.scrollTop = 0;
+    });
+    botones.push(b);
+    menu.appendChild(b);
+  });
+  marco.append(menu, paneles);
+  contenido.prepend(marco);
 
   // --- Pie: dónde se guarda y acciones
   const pie = crear("div", "pie-config");
-  pie.appendChild(crear("span", "donde", estado.sesion
-    ? t("config_guardado_biblioteca", { n: estado.biblioteca || "" })
-    : t("config_guardado_navegador")));
-  if (estado.config.admin_disponible) {
-    const admin = crear("button", "enlace-discreto enlace-admin", t("admin_titulo"));
-    admin.type = "button";
-    admin.addEventListener("click", () => { cerrar(); abrirAdministracion(); });
-    pie.appendChild(admin);
-  }
+  pie.appendChild(crear("span", "donde", t("config_guardado")));
   const restablecer = crear("button", "boton secundario", t("restablecer"));
   const cancelar = crear("button", "boton secundario", t("cancelar"));
   const guardar = crear("button", "boton", t("guardar"));
   pie.append(restablecer, cancelar, guardar);
   const mensajes = crear("div");
-  contenido.append(pie, mensajes);
+  contenido.append(mensajes, pie);
 
   const cerrar = abrirModal(t("configuracion"), contenido, () => {
     if (guardado) return;
-    // Cerrar sin guardar deshace la previsualización
-    aplicarApariencia(original);
+    aplicarApariencia(original);           // cerrar sin guardar deshace la vista previa
     repintarVista();
-  });
+  }, "modal-config");
 
+  // Restablecer: la apariencia y las pestañas por defecto (no toca los datos)
   restablecer.addEventListener("click", () => {
-    guardado = true;                 // no deshacer: se reabre con los valores por defecto
+    guardado = true;
     cerrar();
-    const defecto = { ...prefsDefecto() };
-    aplicarApariencia(defecto);
+    const defectoApariencia = { ...borrador, ...PREFS_DEFECTO, pestanas_ocultas: [] };
+    aplicarApariencia(prefsDe(defectoApariencia));
     repintarVista();
-    abrirConfiguracion(defecto);
+    formularioConfiguracion(defectoApariencia);
   });
   cancelar.addEventListener("click", () => cerrar());
   guardar.addEventListener("click", async () => {
     mensajes.innerHTML = "";
-    const visibles = posibles.filter((s) => disponibles.has(s.clave) && !borrador.pestanas_ocultas.includes(s.clave));
+    const visibles = posibles.filter((x) => disponibles.has(x.clave) && !borrador.pestanas_ocultas.includes(x.clave));
     if (!visibles.length) { mensajes.appendChild(aviso("error", t("config_una_pestana"))); return; }
     guardar.disabled = true;
-    estado.preferencias = { ...borrador, pestanas_ocultas: [...borrador.pestanas_ocultas] };
-    guardarPreferenciasLocales(estado.preferencias);
-    if (estado.sesion) {
-      try {
-        const r = await API.guardarPreferencias(estado.sesion, estado.preferencias);
-        estado.preferencias = { ...PREFS_DEFECTO, ...r.preferencias };
-        guardarPreferenciasLocales(estado.preferencias);
-        // La tabla de signaturas reclasifica el fondo en el servidor al guardar
-        if (editorSig && editorSig.cambiado()) await API.guardarSignaturas(estado.sesion, editorSig.leer());
-      } catch (e) {
-        mensajes.appendChild(aviso("atencion", t("config_error_guardar", { e: e.message })));
-        guardar.disabled = false;
-        return;
+    // Igual que la estándar = sin tabla propia
+    const tabla = editorSig.leer();
+    borrador.signaturas = JSON.stringify(tabla) === JSON.stringify(normalizarFilas(defecto)) ? null : tabla;
+    delete borrador.series_ocultas;
+    try {
+      const r = await API.guardarConfiguracion(estado.tokenAdmin, borrador);
+      estado.config.configuracion = r.configuracion;
+      estado.config.ultima_carga = r.ultima_carga;
+      if (r.nombre_red !== undefined) {
+        estado.config.nombre_red = r.nombre_red;
+        $("#nombre-red").textContent = r.nombre_red || "";
       }
+    } catch (e) {
+      guardar.disabled = false;
+      if (e.estado === 403) { estado.tokenAdmin = null; guardado = true; cerrar(); pedirClaveConfiguracion(e.message); return; }
+      mensajes.appendChild(aviso("error", t("config_error_guardar", { e: e.message })));
+      return;
     }
     guardado = true;
     cerrar();
-    aplicarApariencia(estado.preferencias);
-    if (idiomaPreferido() !== IDIOMA) {
-      cambiarIdioma(idiomaPreferido());   // traduce todo y repinta la vista
-      if (estado.sesion) pintarNavegador();
-      return;
-    }
-    if (estado.sesion) {
-      pintarNavegador();
-      const visiblesAhora = seccionesDisponibles().map((s) => s.clave);
-      mostrarVista(visiblesAhora.includes(estado.vista) ? estado.vista : vistaInicial());
-    }
+    await aplicarConfiguracion();
   });
+}
+
+// Tras guardar: apariencia, idioma, cabecera (nombre y población) y pestañas.
+async function aplicarConfiguracion() {
+  estado.preferencias = prefsDe(conf());
+  guardarPreferenciasLocales(estado.preferencias);
+  aplicarApariencia(estado.preferencias);
+  if (estado.sesion) {
+    try {
+      const r = await API.metricas(estado.sesion);
+      estado.biblioteca = r.biblioteca;
+      estado.metricas = r.metricas;
+      if (estado.identidad) pintarIdentidad({ ...estado.identidad, biblioteca: r.biblioteca, metricas: r.metricas });
+    } catch { /* la sesión ha caducado: se verá al volver a cargar */ }
+  }
+  if (idiomaPreferido() !== IDIOMA) {
+    cambiarIdioma(idiomaPreferido());   // traduce todo y repinta la vista
+    return;
+  }
+  pintarAbrirUltima();
+  if (estado.sesion) {
+    pintarNavegador();
+    const visiblesAhora = seccionesDisponibles().map((x) => x.clave);
+    mostrarVista(visiblesAhora.includes(estado.vista) ? estado.vista : vistaInicial());
+  }
 }
 
 /* --- Editor de la tabla de signaturas (Configuración y Administración) -----
@@ -3174,10 +3516,7 @@ async function abrirInforme() {
     try {
       if (!datos) {
         datos = await API.buscar(estado.sesion, { por_pagina: 1, ligero: true, ui: IDIOMA });
-        if (estado.config.recomendaciones_activas) {
-          compra = await API.recPanel(estado.sesion, { anio_minimo: estado.config.anio_actual - 4, limite: 200 })
-            .catch(() => null);
-        }
+        compra = await API.panelCompras(estado.sesion).catch(() => null);
       }
       hojas.replaceChildren(...componerInforme(datos, compra));
       paginarInforme(hojas);
@@ -3193,7 +3532,7 @@ function componerInforme(datos, compra) {
   const a = prepararDiagnostico(datos, sinFiltros);
   const pc = compra ? prepararCompras(compra) : null;
   const hojas = [hojaResumen(a), hojaSecciones(a, datos)];
-  if (pc && pc.puntos.length) hojas.push(hojaCompra(pc, compra));
+  if (pc && pc.puntos.length) hojas.push(hojaCompra(pc));
   // Notas al final de la última hoja
   hojas[hojas.length - 1].querySelector(".cuerpo-hoja").appendChild(notasInforme(a));
   hojas.forEach((h) => h.appendChild(pieHoja()));
@@ -3347,8 +3686,8 @@ function hojaSecciones(a, datos) {
   return hoja;
 }
 
-/* --- Hoja 3: prioridades de compra (solo con base de la red) -------------- */
-function hojaCompra(pc, compra) {
+/* --- Hoja 3: dónde hace más falta comprar --------------------------------- */
+function hojaCompra(pc) {
   const hoja = nuevaHoja(t("informe_compra"), t("informe_compra_sub"));
   const cuerpo = hoja.querySelector(".cuerpo-hoja");
   const b = bloqueInforme(t("matriz_titulo"), t("matriz_sub"));
@@ -3357,33 +3696,11 @@ function hojaCompra(pc, compra) {
     textos: { titulo: t("matriz_titulo"), cuadrante: t("matriz_cuadrante"), ejeX: t("matriz_eje_x"),
               mediana: t("matriz_mediana", { v: pct(pc.corteX) }), detalle: (p) => p.etiqueta },
   }));
-  cuerpo.appendChild(b);
-
   const prioritarias = pc.prioritarias.slice().sort((x, y) => y.y - x.y);
-  const bloqueTitulos = bloqueInforme(t("informe_titulos"),
-    prioritarias.length ? t("informe_titulos_sub") : t("informe_sin_prioritarias"));
-  const tabla = crear("table", "tabla-informe");
-  const cab = crear("tr");
-  [t("col_titulo"), t("col_autor"), t("col_anio"), t("col_seccion"), t("col_red")].forEach((c, i) =>
-    cab.appendChild(crear("th", i >= 2 && i !== 3 ? "num" : "", c)));
-  const thead = crear("thead"); thead.appendChild(cab); tabla.appendChild(thead);
-  const tbody = crear("tbody");
-  const elegidos = prioritarias.length
-    ? prioritarias.flatMap((p) => compra.filas.filter((f) => f.seccion === p.clave).slice(0, 4))
-    : compra.filas.slice(0, 14);
-  elegidos.slice(0, 16).forEach((f) => {
-    const tr = crear("tr");
-    [f.titulo || "—", f.autor || "", f.anio || "", traducirEtiqueta(f.seccion || ""),
-     miles(f.n_bibliotecas)].forEach((v, i) => tr.appendChild(crear("td", i >= 2 && i !== 3 ? "num" : "", String(v))));
-    tbody.appendChild(tr);
-  });
-  tabla.appendChild(tbody);
-  bloqueTitulos.appendChild(tabla);
-  if (prioritarias.length) {
-    bloqueTitulos.appendChild(crear("p", "nota-pie", t("informe_prioritarias_lista", {
-      s: prioritarias.map((p) => `${p.etiqueta} (${formatoUso(p.y)})`).join(" · ") })));
-  }
-  cuerpo.appendChild(bloqueTitulos);
+  b.appendChild(crear("p", "nota-pie", prioritarias.length
+    ? t("informe_prioritarias_lista", { s: prioritarias.map((p) => `${p.etiqueta} (${formatoUso(p.y)})`).join(" · ") })
+    : t("informe_sin_prioritarias")));
+  cuerpo.appendChild(b);
   return hoja;
 }
 
@@ -3399,150 +3716,7 @@ function notasInforme(a) {
   return b;
 }
 
-/* ==========================================================================
-   Administración de la red
-   Lo que decide la red para todas las bibliotecas. Se entra con la clave de
-   config.py (CLAVE_ADMIN); el acceso dura dos horas.
-   ========================================================================== */
-async function abrirAdministracion() {
-  const contenido = crear("div", "config admin");
-  const cerrar = abrirModal(t("admin_titulo"), contenido);
-
-  const pintarEntrada = (error) => {
-    contenido.innerHTML = "";
-    contenido.appendChild(crear("p", "ayuda-config", t("admin_intro")));
-    const campo = crear("label", "campo");
-    const entrada = crear("input");
-    entrada.type = "password";
-    entrada.autocomplete = "current-password";
-    campo.append(crear("span", "rotulo-campo", t("admin_clave")), entrada);
-    contenido.appendChild(campo);
-    if (error) contenido.appendChild(aviso("error", error));
-    // No hay recuperación de clave por correo (haría falta un servidor de
-    // correo que mantener): si se olvida, la administración pone otra.
-    contenido.appendChild(crear("p", "ayuda-config", t("admin_olvido")));
-    const pie = crear("div", "pie-config");
-    const entrar = crear("button", "boton", t("admin_entrar"));
-    const cancelar = crear("button", "boton secundario", t("cancelar"));
-    cancelar.addEventListener("click", cerrar);
-    pie.append(cancelar, entrar);
-    contenido.appendChild(pie);
-    const enviar = async () => {
-      entrar.disabled = true;
-      try {
-        const r = await API.adminEntrar(entrada.value);
-        estado.tokenAdmin = r.token;
-        pintarFormulario(r.configuracion);
-      } catch (e) { pintarEntrada(e.message); }
-    };
-    entrar.addEventListener("click", enviar);
-    entrada.addEventListener("keydown", (e) => { if (e.key === "Enter") enviar(); });
-    entrada.focus();
-  };
-
-  const pintarFormulario = (conf) => {
-    contenido.innerHTML = "";
-    const borrador = JSON.parse(JSON.stringify(conf));
-    contenido.appendChild(crear("p", "ayuda-config", t("admin_ayuda")));
-
-    const grupoCasillas = (leyenda, ayuda, opciones, lista) => {
-      const fs = crear("fieldset");
-      fs.appendChild(crear("legend", null, leyenda));
-      if (ayuda) fs.appendChild(crear("p", "ayuda-config", ayuda));
-      const caja = crear("div", "lista-pestanas");
-      opciones.forEach(([valor, etiqueta]) => {
-        const l = crear("label");
-        const c = crear("input");
-        c.type = "checkbox";
-        c.checked = borrador[lista].includes(valor);
-        c.addEventListener("change", () => {
-          const s = new Set(borrador[lista]);
-          if (c.checked) s.add(valor); else s.delete(valor);
-          borrador[lista] = opciones.map(([v]) => v).filter((v) => s.has(v));
-        });
-        l.append(c, document.createTextNode(etiqueta));
-        caja.appendChild(l);
-      });
-      fs.appendChild(caja);
-      return fs;
-    };
-    contenido.appendChild(grupoCasillas(t("admin_pestanas"), t("admin_pestanas_ayuda"),
-      [["diagnostico", t("nav_diagnostico")], ["secciones", t("nav_secciones")], ["compras", t("nav_compras")],
-       ["red", t("nav_red")], ["seguimiento", t("nav_seguimiento")]], "pestanas_activas"));
-    contenido.appendChild(grupoCasillas(t("admin_idiomas"), null,
-      IDIOMAS_INTERFAZ.map((i) => [i.codigo, i.nombre]), "idiomas"));
-
-    // Apariencia y lengua por defecto para las bibliotecas que no elijan otra
-    const fsDef = crear("fieldset");
-    fsDef.appendChild(crear("legend", null, t("admin_defecto")));
-    fsDef.appendChild(crear("p", "ayuda-config", t("admin_defecto_ayuda")));
-    const fila = crear("div", "fila-admin");
-    fila.appendChild(selector(t("config_idioma"), [{ valor: "", etiqueta: t("admin_idioma_instalacion") },
-      ...IDIOMAS_INTERFAZ.map((i) => ({ valor: i.codigo, etiqueta: i.nombre }))],
-      borrador.idioma_defecto || "", (v) => { borrador.idioma_defecto = v || null; }));
-    fila.appendChild(selector(t("config_tema"), [{ valor: "oscuro", etiqueta: t("tema_oscuro") },
-      { valor: "claro", etiqueta: t("tema_claro") }], borrador.tema_defecto, (v) => { borrador.tema_defecto = v; }));
-    fila.appendChild(selector(t("config_paleta"), ["okabe", "viridis", "azules"].map((p) => ({ valor: p, etiqueta: t(`paleta_${p}`) })),
-      borrador.paleta_defecto, (v) => { borrador.paleta_defecto = v; }));
-    fsDef.appendChild(fila);
-    contenido.appendChild(fsDef);
-
-    // Historial de cargas
-    const fsHist = crear("fieldset");
-    fsHist.appendChild(crear("legend", null, t("admin_historial")));
-    fsHist.appendChild(crear("p", "ayuda-config", t("admin_historial_ayuda")));
-    const filaH = crear("div", "fila-admin");
-    filaH.appendChild(casilla(t("admin_historial_activo"), borrador.historial, (v) => { borrador.historial = v; }));
-    filaH.appendChild(entradaNumero(t("admin_max_cargas"), borrador.max_cargas,
-      (v) => { borrador.max_cargas = v; }, { min: 1, max: 60 }));
-    fsHist.appendChild(filaH);
-    contenido.appendChild(fsHist);
-
-    // --- Secciones por signatura de la red
-    const fsSig = crear("fieldset");
-    fsSig.appendChild(crear("legend", null, t("sig_titulo")));
-    fsSig.appendChild(crear("p", "ayuda-config", t("sig_admin_ayuda")));
-    const defecto = (estado.config && estado.config.signaturas_defecto) || [];
-    const editorRed = editorSignaturas(borrador.signaturas || defecto, defecto, t("sig_restaurar"));
-    fsSig.appendChild(editorRed.nodo);
-    contenido.appendChild(fsSig);
-
-    // --- Novedades de DILVE
-    contenido.appendChild(seccionDilve(borrador));
-
-    const mensajes = crear("div");
-    const pie = crear("div", "pie-config");
-    pie.appendChild(crear("span", "donde", t("admin_donde")));
-    const cancelar = crear("button", "boton secundario", t("cancelar"));
-    const guardar = crear("button", "boton", t("guardar"));
-    cancelar.addEventListener("click", cerrar);
-    pie.append(cancelar, guardar);
-    contenido.append(mensajes, pie);
-    guardar.addEventListener("click", async () => {
-      mensajes.innerHTML = "";
-      if (!borrador.pestanas_activas.length) { mensajes.appendChild(aviso("error", t("config_una_pestana"))); return; }
-      if (!borrador.idiomas.length) { mensajes.appendChild(aviso("error", t("admin_un_idioma"))); return; }
-      guardar.disabled = true;
-      // Igual que la estándar = sin tabla propia de la red
-      const tablaRed = editorRed.leer();
-      borrador.signaturas = JSON.stringify(tablaRed) === JSON.stringify(normalizarFilas(defecto)) ? null : tablaRed;
-      try {
-        const r = await API.adminGuardar(estado.tokenAdmin, borrador);
-        estado.config.red = r.configuracion;
-        cerrar();
-        aplicarConfiguracionRed();
-      } catch (e) {
-        guardar.disabled = false;
-        if (e.estado === 403) { estado.tokenAdmin = null; pintarEntrada(e.message); return; }
-        mensajes.appendChild(aviso("error", e.message));
-      }
-    });
-  };
-
-  pintarEntrada();
-}
-
-/* --- Novedades de DILVE dentro de la administración ------------------------
+/* --- Novedades de DILVE dentro de la configuración -------------------------
    Las credenciales y las descargas van por su propio endpoint: la
    configuración (qué idiomas, cada cuántos días) viaja con el resto. */
 function seccionDilve(borrador) {
@@ -3685,19 +3859,6 @@ async function pintarEstadoDilve(caja) {
   caja.appendChild(acciones);
 }
 
-// Tras cambiar la configuración de la red: idioma, apariencia y pestañas.
-function aplicarConfiguracionRed() {
-  if (!estado.preferencias._guardadas) {
-    estado.preferencias = { ...prefsDefecto(), idioma: null };
-    aplicarApariencia(estado.preferencias);
-  }
-  if (idiomaPreferido() !== IDIOMA) cambiarIdioma(idiomaPreferido());
-  if (estado.sesion) {
-    pintarNavegador();
-    mostrarVista(estado.vista);
-  }
-}
-
 /* ==========================================================================
    Vista: seguimiento
    Evolución de los indicadores entre cargas y el historial de cargas de la
@@ -3771,10 +3932,71 @@ async function vistaSeguimiento(vista) {
     if (cargas.some((c) => c.sin_no_prestados)) cuerpo.appendChild(crear("p", "nota-pie", t("seg_nota_sin_nunca")));
   }
 
-  // Historial de cargas
+  // Historial de cargas, y al lado las altas y bajas de la carga que se ve
   const huecoTabla = crear("div", "hueco zona-cargas");
   rejilla.appendChild(huecoTabla);
   pintarTablaCargas(huecoTabla, datos);
+  const huecoCambios = crear("div", "hueco zona-cambios");
+  rejilla.appendChild(huecoCambios);
+  pintarCambios(huecoCambios);
+}
+
+/* --- Altas y bajas respecto a la carga anterior -----------------------------
+   Por código de barras: baja = estaba en el topográfico anterior y ya no está
+   (expurgo, pérdida o traslado); alta = al revés. */
+const MAX_FILAS_CAMBIOS = 1000;
+
+async function pintarCambios(hueco) {
+  cargando(hueco);
+  let d;
+  try { d = await API.cambios(estado.sesion); }
+  catch (e) { hueco.replaceChildren(aviso("error", e.message)); return; }
+  if (!hueco.isConnected) return;
+  if (!d.anterior) {
+    const cuerpo = cuadroPanel(hueco, t("cambios_titulo"));
+    cuerpo.appendChild(crear("p", "vacio", t("cambios_sin_anterior")));
+    return;
+  }
+  const c = estado.controles.cambios || (estado.controles.cambios = { ver: d.bajas ? "bajas" : "altas" });
+  const filas = c.ver === "bajas" ? d.lista_bajas : d.lista_altas;
+  const columnas = [
+    { clave: "signatura_real", titulo: t("col_signatura"), tipo: "mono", ancho: "20%" },
+    { clave: "titulo", titulo: t("col_titulo"), tipo: "texto", ancho: "44%" },
+    { clave: "categoria", titulo: t("col_seccion"), tipo: "texto", ancho: "24%",
+      render: (f) => escapar(traducirEtiqueta(f.categoria || "")), csv: (f) => f.categoria },
+    { clave: "loc", titulo: t("col_loc"), tipo: "texto", ancho: "12%" },
+  ];
+  const cuerpo = cuadroPanel(hueco, t("cambios_titulo"), t("cambios_sub", { f: fechaCorta(d.anterior.fecha) }),
+    filas.length ? botonCSV(`${c.ver}.csv`, columnas, filas) : null);
+
+  const barra = crear("div", "barra-cambios");
+  const grupo = crear("div", "conmutador");
+  grupo.setAttribute("role", "group");
+  [["bajas", t("cambios_bajas", { n: miles(d.bajas) })], ["altas", t("cambios_altas", { n: miles(d.altas) })]]
+    .forEach(([valor, texto]) => {
+      const b = crear("button", valor === c.ver ? "activo" : "", texto);
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(valor === c.ver));
+      b.addEventListener("click", () => { if (c.ver !== valor) { c.ver = valor; pintarCambios(hueco); } });
+      grupo.appendChild(b);
+    });
+  barra.appendChild(grupo);
+  // Las secciones con más movimiento, de un vistazo
+  const secciones = (d.por_seccion || []).filter((x) => x[c.ver]).slice(0, 6);
+  if (secciones.length) {
+    const lista = crear("span", "secciones-cambios");
+    lista.textContent = secciones.map((x) => `${traducirEtiqueta(x.clave)} ${miles(x[c.ver])}`).join(" · ");
+    barra.appendChild(lista);
+  }
+  cuerpo.appendChild(barra);
+
+  const caja = crear("div", "tabla-desplazable");
+  crearTabla(caja, columnas, filas.slice(0, MAX_FILAS_CAMBIOS), { textoVacio: t("cambios_ninguno") });
+  cuerpo.appendChild(caja);
+  if (filas.length > MAX_FILAS_CAMBIOS) {
+    cuerpo.appendChild(crear("p", "nota-pie", t("cambios_recortado", { n: miles(MAX_FILAS_CAMBIOS), t: miles(filas.length) })));
+  }
+  cuerpo.appendChild(crear("p", "nota-pie", t("cambios_nota")));
 }
 
 function pintarTablaCargas(hueco, datos) {
@@ -3783,8 +4005,8 @@ function pintarTablaCargas(hueco, datos) {
   if (!datos.cargas.length) { cuerpo.appendChild(crear("p", "vacio", t("seg_sin_cargas"))); return; }
   const tabla = crear("table", "datos tabla-cargas");
   const cab = crear("tr");
-  [t("seg_fecha"), t("seg_ficheros"), t("col_volumenes"), t("m_circulacion"), t("col_recientes"), ""].forEach((c, i) =>
-    cab.appendChild(crear("th", i >= 2 && i <= 4 ? "num" : "", c)));
+  [t("seg_fecha"), t("seg_ficheros"), t("col_volumenes"), t("col_altas"), t("col_bajas"), t("m_circulacion"),
+   t("col_recientes"), ""].forEach((c, i) => cab.appendChild(crear("th", i >= 2 && i <= 6 ? "num" : "", c)));
   const thead = crear("thead"); thead.appendChild(cab); tabla.appendChild(thead);
   const tbody = crear("tbody");
   datos.cargas.forEach((c) => {
@@ -3799,6 +4021,9 @@ function pintarTablaCargas(hueco, datos) {
     fich.title = Object.values(c.ficheros || {}).flat().join("\n");
     tr.appendChild(fich);
     tr.appendChild(crear("td", "num", miles(c.volumenes)));
+    const cifra = (v, signo) => (v === null || v === undefined ? "—" : v ? `${signo}${miles(v)}` : "0");
+    tr.appendChild(crear("td", "num", cifra(c.altas, "+")));
+    tr.appendChild(crear("td", "num", cifra(c.bajas, "−")));
     tr.appendChild(crear("td", "num", c.pct_prestamos === null || c.pct_prestamos === undefined ? t("seg_sin_dato_prestamo") : pct(c.pct_prestamos)));
     tr.appendChild(crear("td", "num", c.pct_recientes === null || c.pct_recientes === undefined ? "—" : pct(c.pct_recientes)));
     const acciones = crear("td", "acciones-carga");
@@ -3833,41 +4058,16 @@ function pintarTablaCargas(hueco, datos) {
 /* ==========================================================================
    Arranque
    ========================================================================== */
-function pintarPastillaBase() {
-  const pastilla = $("#pastilla-base");
-  const activa = estado.config.recomendaciones_activas;
-  pastilla.innerHTML = "";
-  const punto = crear("span", activa ? "punto" : "punto apagado");
-  pastilla.append(punto, document.createTextNode(activa ? t("base_conectada") : t("base_sin_enlazar")));
-  pastilla.title = activa ? "" : (estado.config.base_datos.error || "");
-}
-
 function pintarAvisosDeArranque() {
   const avisos = $("#avisos-globales");
   avisos.innerHTML = "";
-  const cfg = estado.config;
-  if (cfg.directorio.error) {
-    avisos.appendChild(aviso("error", `${t("directorio_error")}: ${cfg.directorio.error}`));
-  } else if (cfg.directorio.avisos.length) {
-    avisos.appendChild(aviso("atencion", "", cfg.directorio.avisos));
-  }
-  if (!cfg.recomendaciones_activas) {
-    const detalle = cfg.base_datos.error ? ` (${cfg.base_datos.error})` : "";
-    avisos.appendChild(aviso("info", t("recomendaciones_ocultas") + detalle));
-  }
-}
-
-function idiomasPermitidos() {
-  const red = configRed().idiomas;
-  const lista = IDIOMAS_INTERFAZ.filter((i) => !red || red.includes(i.codigo));
-  return lista.length ? lista : IDIOMAS_INTERFAZ;
+  if (!fuentesCompra().length) ponerAviso(aviso("info", t("recomendaciones_ocultas")));
 }
 
 function idiomaPreferido() {
-  const permitidos = idiomasPermitidos().map((i) => i.codigo);
-  const candidatos = [estado.preferencias && estado.preferencias.idioma, configRed().idioma_defecto,
-                      estado.config && estado.config.idioma];
-  return candidatos.find((c) => c && permitidos.includes(c)) || permitidos[0];
+  const posibles = IDIOMAS_INTERFAZ.map((i) => i.codigo);
+  const candidatos = [estado.preferencias && estado.preferencias.idioma, estado.config && estado.config.idioma];
+  return candidatos.find((c) => c && posibles.includes(c)) || posibles[0];
 }
 
 // Traduce todo lo que está fuera de las vistas (cabecera, pasos de carga,
@@ -3876,10 +4076,9 @@ function aplicarIdioma(codigo) {
   fijarIdioma(codigo);
   traducirPlantilla();
   rotularBotonConfiguracion();
-  if (estado.config) pintarPastillaBase();
   if (estado.sesion && estado.identidad) pintarIdentidad(estado.identidad);
   pintarPasos();
-  pintarAccesoClave();
+  pintarAbrirUltima();
   actualizarBotonAnalizar();
   pintarAvisosDeArranque();
 }
@@ -3906,10 +4105,10 @@ async function iniciar() {
     document.body.innerHTML = `<p style="padding:2rem">${escapar(t("error_generico"))}</p>`;
     return;
   }
-  if (!estado.preferencias._guardadas) {
-    estado.preferencias = { ...prefsDefecto() };
-    aplicarApariencia(estado.preferencias);
-  }
+  // La configuración guardada en el servidor manda sobre la del navegador
+  estado.preferencias = prefsDe(conf());
+  guardarPreferenciasLocales(estado.preferencias);
+  aplicarApariencia(estado.preferencias);
   fijarIdioma(idiomaPreferido());
   traducirPlantilla();
   montarBotonConfiguracion();
@@ -3918,7 +4117,6 @@ async function iniciar() {
   if (estado.config.licencia) $("#enlace-licencia").textContent = estado.config.licencia;
   // La AGPLv3 exige ofrecer el código a quien usa el programa por red.
   if (estado.config.url_codigo) $("#enlace-codigo").href = estado.config.url_codigo;
-  pintarPastillaBase();
   if (estado.config.autoria) {
     $("#autoria").innerHTML = escapar(estado.config.autoria)
       .replace("bildumargi@gmail.com", '<a href="mailto:bildumargi@gmail.com">bildumargi@gmail.com</a>');
@@ -4000,7 +4198,7 @@ async function recorridoAutomatico() {
     await esperarQuieto();
   };
   const disponibles = seccionesDisponibles().map((x) => x.clave);
-  const vistas = ["diagnostico", "secciones", "compras", "red", "seguimiento"];
+  const vistas = ["diagnostico", "secciones", "series", "compras", "seguimiento"];
   for (const v of vistas) {
     if (!disponibles.includes(v)) continue;
     await paso(t("grab_vista", { v }), () => mostrarVista(v));
@@ -4041,21 +4239,13 @@ async function recorridoAutomatico() {
     Object.assign(c, { categoria: "", orden: null, desc: false, pagina: 1 });
   }
 
-  // --- Sugerencias de compra: las tres fuentes con sus filtros
+  // --- Sugerencias de compra: las fuentes con sus filtros
   if (disponibles.includes("compras")) {
     const c = estado.controles.compras;
     for (const fuente of fuentesCompra().map((f) => f.clave)) {
       c.fuente = fuente;
       c.seccion = "";
       await paso(t("grab_fuente", { f: fuente }), () => mostrarVista("compras"));
-      if (fuente === "presencia") {
-        const panel = ultimaGrabada("GET /api/sesion/S/recomendaciones/panel");
-        const claves = panel ? prepararCompras(panel).puntos.map((p) => p.clave) : [];
-        for (const seccion of claves) {
-          await paso(t("grab_fuente", { f: seccion }), () => { c.seccion = seccion; return mostrarVista("compras"); });
-        }
-        c.seccion = "";
-      }
       if (fuente === "autores") {
         await esperarAutores();
         await paso(t("grab_fuente", { f: fuente }), () => mostrarVista("compras"));
@@ -4083,16 +4273,15 @@ async function recorridoAutomatico() {
         c.personalizadas = false;
       }
     }
-    c.fuente = "presencia";
+    c.fuente = fuentesCompra()[0]?.clave || "autores";
   }
 
-  // --- Fichas de los títulos que han aparecido (catálogo propio y red)
-  const ids = new Set(), sistemas = new Set();
+  // --- Fichas de los títulos del fondo propio que han aparecido
+  const ids = new Set();
   const recorrer = (v) => {
     if (Array.isArray(v)) v.forEach(recorrer);
     else if (v && typeof v === "object") {
       if (v.record_id != null) ids.add(v.record_id);
-      if (v.id_sistema != null) sistemas.add(String(v.id_sistema));
       // «todas» es la lista completa para el CSV: sus fichas no se ven en pantalla
       Object.entries(v).forEach(([k, x]) => { if (k !== "todas") recorrer(x); });
     }
@@ -4101,11 +4290,6 @@ async function recorridoAutomatico() {
   let n = 0;
   for (const id of [...ids].slice(0, 400)) {
     await API.ficha(estado.sesion, id).catch(() => null);
-    if (++n % 25 === 0) actualizarPanelGrabacion(t("grab_fichas", { n }));
-  }
-  for (const id of [...sistemas].slice(0, 300)) {
-    await API.fichaRed(id).catch(() => null);
-    await API.valoraciones(estado.sesion, id).catch(() => null);
     if (++n % 25 === 0) actualizarPanelGrabacion(t("grab_fichas", { n }));
   }
   await paso(t("grab_vista", { v: "diagnostico" }), () => mostrarVista("diagnostico"));

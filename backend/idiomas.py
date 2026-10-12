@@ -1,13 +1,20 @@
 # -*- coding: utf-8 -*-
-"""Idioma del documento a partir del MARC 008/35-37, exclusivamente.
+"""Idioma de cada ejemplar, de tres fuentes, por este orden:
 
-MARC 21 usa los códigos bibliográficos ISO 639-2/B, no los terminológicos:
-el euskera es "baq" (NO "eus"), el francés "fre" (NO "fra"), el alemán "ger".
-El 041 no se consulta: viene mal cumplimentado en bastantes registros y solo
-introduce ruido.
+  1. El catálogo MARC (008/35-37), si se ha extraído (ver marc.py) y el
+     código es válido: describe el ejemplar concreto y cubre casi todo el
+     fondo, también lo antiguo.
+  2. La ficha de DILVE del libro (por ISBN, de lo ya descargado: aquí no se
+     llama a DILVE): cubre las novedades aún sin catalogar y corrige los
+     errores de catalogación («esp» en vez de «spa»).
+  3. La signatura, cuando lo dice sin duda: su primera palabra es una marca
+     de lengua («EUS N ATX», «ENG I1 ALO»).
+
+Si ninguna lo dice, queda como «Sin determinar»: nunca se inventa.
+
+DILVE (ONIX) y MARC usan los mismos códigos ISO 639-2/B: el euskera es "baq"
+(o "eus"), el francés "fre" (o "fra"), el alemán "ger" (o "deu").
 """
-
-import re
 
 IDIOMAS_MARC = {
     "aar": "Afar", "abk": "Abjasio", "ace": "Achenés", "ach": "Acoli", "ada": "Adangme", "ady": "Adigué",
@@ -232,11 +239,6 @@ IDIOMAS_LABELS_EU = {
     "Zuñi": "Zuñiera", "Árabe": "Arabiera",
 }
 
-_RE_MARC_008 = re.compile(r'<controlfield[^>]*tag="008"[^>]*>(.*?)</controlfield>', re.S)
-_RE_MARC_SUB = re.compile(r'<subfield[^>]*code="([a-z])"[^>]*>(.*?)</subfield>', re.S)
-_RE_MARC_245 = re.compile(r'<datafield[^>]*tag="245".*?</datafield>', re.S)
-_RE_COD3 = re.compile(r"[a-z]{3}")
-
 _IDIOMAS_VALIDOS = set(IDIOMAS_MARC.values())
 
 
@@ -247,46 +249,10 @@ def nombre_idioma(cod):
     return IDIOMAS_MARC.get(cod, f"Otro ({cod})")
 
 
-def idioma_desde_marcxml(xml):
-    """Idioma del documento, tomado solo de las posiciones 35-37 del 008.
-
-    Se extrae con expresiones regulares y no con ElementTree a propósito: hay
-    que recorrer decenas de miles de registros y construir un árbol DOM por
-    registro multiplica tiempo y memoria sin aportar nada."""
-    if not xml:
-        return IDIOMA_SIN_DATO
-    m008 = _RE_MARC_008.search(xml)
-    if not m008:
-        return IDIOMA_SIN_DATO
-    dato = m008.group(1)
-    if len(dato) < 38:
-        return IDIOMA_SIN_DATO
-    posible = dato[35:38].strip().lower()
-    if not _RE_COD3.fullmatch(posible):
-        return IDIOMA_SIN_DATO
-    return nombre_idioma(posible) or IDIOMA_SIN_DATO
-
-
 def es_idioma_normalizado(idioma):
     """True si el idioma figura en la lista MARC de lenguas. Descarta «Sin
     determinar» y «Otro (xxx)», normalmente errores de catalogación."""
     return bool(idioma) and idioma in _IDIOMAS_VALIDOS
-
-
-def es_bibliografico_desde_marcxml(xml):
-    """True si el 245 no trae subcampo $h. El GMD del $h indica que el
-    registro no es texto impreso (vídeo, audio, mapa, recurso electrónico).
-    Sin dato MARC se asume bibliográfico, para no descartar por falta de
-    información."""
-    if not xml:
-        return True
-    m245 = _RE_MARC_245.search(xml)
-    if not m245:
-        return True
-    for code, val in _RE_MARC_SUB.findall(m245.group(0)):
-        if code == "h" and val.strip():
-            return False
-    return True
 
 
 def traducir_idioma(nombre, idioma_ui="es"):
@@ -297,7 +263,46 @@ def traducir_idioma(nombre, idioma_ui="es"):
     return IDIOMAS_LABELS_EU.get(nombre, nombre)
 
 
-def isbn_desde_marcxml(xml):
-    m = re.search(r"ISBN\s*([\dXx\-]{8,})", xml or "") or re.search(
-        r'tag="020"[\s\S]{0,300}?code="a">([\dXx\-]{8,})<', xml or "")
-    return m.group(1) if m else None
+# Primera palabra de la signatura que marca la lengua del documento. Solo la
+# primera: en «342.7 EUS» o «025 FRA», EUS y FRA son el autor o el tema.
+IDIOMA_POR_SIGNATURA = {
+    "EUS": "baq", "EUSK": "baq", "ENG": "eng", "ING": "eng", "FRA": "fre", "FRE": "fre",
+    "CAT": "cat", "GAL": "glg", "GLG": "glg", "ALE": "ger", "DEU": "ger", "GER": "ger",
+    "ITA": "ita", "POR": "por",
+}
+# Códigos que no dicen el idioma: sin determinar, sin contenido lingüístico
+_SIN_IDIOMA = {"und", "zxx", "mis"}
+
+
+def idioma_de_signatura(signatura):
+    """Código de la lengua si la primera palabra de la signatura la marca."""
+    partes = str(signatura or "").split()
+    return IDIOMA_POR_SIGNATURA.get(partes[0].upper()) if partes else None
+
+
+def asignar_idiomas(registros, idiomas_dilve, idiomas_marc=None):
+    """Pone a cada ejemplar su idioma y de dónde sale («marc», «dilve»,
+    «signatura» o None).
+
+    idiomas_dilve  {isbn: código} de las fichas de DILVE descargadas
+    idiomas_marc   {código de barras: idioma} extraído del catálogo MARC
+
+    Devuelve cuántos salen de cada sitio."""
+    idiomas_marc = idiomas_marc or {}
+    cuenta = {"total": len(registros), "marc": 0, "dilve": 0, "signatura": 0, "sin_dato": 0}
+    for r in registros:
+        nombre, origen = idiomas_marc.get(str(r.get("record_id"))), None
+        if es_idioma_normalizado(nombre) and nombre != IDIOMAS_MARC.get("und"):
+            origen = "marc"
+        else:
+            codigo = (idiomas_dilve.get(r.get("isbn")) or "").lower().strip() if r.get("isbn") else ""
+            if codigo and codigo not in _SIN_IDIOMA:
+                nombre, origen = nombre_idioma(codigo), "dilve"
+            else:
+                codigo = idioma_de_signatura(r.get("signatura_real"))
+                if codigo:
+                    nombre, origen = nombre_idioma(codigo), "signatura"
+        r["idioma"] = nombre if origen else IDIOMA_SIN_DATO
+        r["idioma_origen"] = origen
+        cuenta[origen or "sin_dato"] += 1
+    return cuenta

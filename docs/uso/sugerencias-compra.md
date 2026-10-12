@@ -1,44 +1,54 @@
 # Sugerencias de compra
 
-La pestaña **Sugerencias de compra** aparece si la red tiene conectado el
-catálogo colectivo. Cruza la demanda de tu fondo con lo que hay en la red y en
-el mercado editorial.
-
-![Sugerencias de compra, fuente Presencia en bibliotecas: matriz de dónde comprar, oferta de la red por sección y títulos recomendados](../img/compras-panel.png)
+La pestaña **Sugerencias de compra** aparece cuando hay una cuenta de DILVE
+(ver [DILVE](../administracion/dilve.md)). Cruza la demanda de tu fondo con lo
+que se publica.
 
 ## El panel de arriba: dónde comprar
 
-Es igual en las tres fuentes:
+Es igual en las dos fuentes:
 
 - **Indicadores generales** del fondo.
 - **¿Dónde hace más falta comprar?**: una matriz que cruza el **uso relativo**
-  de cada sección con su **actualidad**. Las secciones prioritarias combinan
-  más demanda que peso con un fondo menos actualizado.
-- **Oferta de la red por sección.**
+  de cada sección (altura) con su **actualidad** (izquierda-derecha). El
+  tamaño de cada círculo son los volúmenes de la sección. Las secciones
+  prioritarias combinan más demanda que peso con un fondo menos actualizado.
+- **Demanda por sección**: el uso relativo y la actualidad de cada sección en
+  barras, con las prioritarias primero.
 
 Al pulsar una sección, la lista de abajo se acota a ella.
 
 ![Lista acotada a la sección IC (Cómic infantil) tras pulsarla en la matriz](../img/compras-seccion.png)
 
-## Tres fuentes de títulos
+## Dos fuentes de títulos
 
-En el menú lateral eliges de dónde salen las sugerencias:
-
-### Presencia en bibliotecas
-
-Títulos que tienen muchas bibliotecas de la red y la tuya no, con su presencia
-y sus valoraciones. Lo que ya está en tu fondo se descarta solo.
+En el menú lateral eliges de dónde salen las sugerencias.
 
 ### Autores más prestados
 
-Otras obras, a la venta, de los autores de tus títulos más prestados. Cada
-propuesta dice de qué título sale. Tiene filtros de idioma, sección y edad.
+Otras obras, a la venta, de los autores que más se prestan en tu biblioteca.
+Se cuenta **por autor, con todos sus libros**:
+
+- se toman los autores que suman la mitad de los préstamos de cada sección;
+- de **todos** sus libros en tu fondo se piden a DILVE sus «otras obras»;
+- primero van los autores que más se prestan y aquellos de los que sale la
+  mayor parte de los ejemplares.
+
+Cada propuesta lo explica, por ejemplo:
+
+> Javier Castillo: 8 títulos en tu fondo · 8 de 8 ejemplares prestados ·
+> 116 préstamos (el más prestado: «El día que se perdió el amor», 23)
+
+Tiene filtros de idioma, sección y edad. No se repiten ediciones de una misma
+obra, y como mucho salen tres libros por autor.
 
 La primera vez se calcula en segundo plano: verás un aviso de progreso. El
 resultado se guarda y no se vuelve a calcular mientras tu préstamo no cambie;
-para rehacerlo está **Recalcular**.
+para rehacerlo está **Volver a calcular**.
 
-![Autores más prestados: obras del mismo autor que no tienes (portadas difuminadas en el manual)](../img/compras-autores.png)
+!!! note "Captura pendiente"
+    `img/compras-autores.png` — Autores más prestados: lista de obras con la
+    explicación por autor (portadas difuminadas en el manual).
 
 ### Novedades
 
@@ -50,11 +60,6 @@ Al pulsar un título se abre su ficha a la derecha: portada, autoría,
 editorial, fecha, colección, sección, idioma, resumen, palabras clave y
 materias. Se puede ampliar con el botón de arriba o ensanchar arrastrando su
 borde izquierdo.
-
-En **Presencia en bibliotecas**, la ficha catalográfica muestra además qué
-bibliotecas de la red tienen el título, con su signatura:
-
-![Ficha catalográfica con los ejemplares en la red](../img/compras-ficha.png)
 
 !!! info "Sin precios"
     Bildumargi no maneja precios ni presupuestos.

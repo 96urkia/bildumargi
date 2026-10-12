@@ -47,9 +47,11 @@ misma serie ni tres de un mismo autor por cada 50.
 - **Favorece lo que ya funciona**: no conoce a los lectores que todavía no
   vienen. Es una ayuda para seleccionar, no una decisión.
 - **Necesita fichas**: el autor se aprende de todo tu catálogo, pero el resto
-  de rasgos solo de los títulos propios con ficha DILVE descargada.
-- **Los pesos son razonables, no validados** en bibliotecas españolas. Cada
-  red puede ajustarlos y comprobar el efecto con **Comparar con el histórico**.
+  de rasgos solo de los títulos propios con ficha DILVE descargada. Por eso
+  conviene descargar las [fichas de todo el catálogo](../administracion/dilve.md#fichas-de-todo-el-catalogo).
+- **Los pesos son razonables, no validados** en bibliotecas españolas. Se
+  pueden ajustar (ver [Ajustes avanzados](../administracion/ajustes-avanzados.md#modelo-de-prestamo-afinidadjson))
+  y comprobar el efecto con **Comparar con el histórico**.
 
 ## Referencias
 

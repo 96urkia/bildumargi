@@ -9,7 +9,7 @@ if ! getent passwd bildumargi >/dev/null; then
 fi
 install -d -o bildumargi -g bildumargi -m 0750 /var/lib/bildumargi
 
-# Claves: el fichero se crea una sola vez, con una clave de administración
+# Claves: el fichero se crea una sola vez, con una clave de configuración
 # aleatoria, y nunca se sobrescribe en las actualizaciones.
 if [ ! -f /etc/bildumargi/secretos.env ]; then
     umask 077
@@ -22,7 +22,7 @@ BILDUMARGI_DILVE_USUARIO=
 BILDUMARGI_DILVE_CLAVE=
 FIN
     chmod 0600 /etc/bildumargi/secretos.env
-    echo "Bildumargi: clave de administración creada en /etc/bildumargi/secretos.env"
+    echo "Bildumargi: clave de configuración creada en /etc/bildumargi/secretos.env"
 fi
 
 # Servicio: se activa y se (re)arranca si el sistema usa systemd

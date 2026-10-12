@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Directorio de bibliotecas de la red, leído de datos/bibliotecas.xlsx.
+"""Directorio de bibliotecas de la red de la 1.x, leído de datos/bibliotecas.xlsx.
+
+En la 2.0 solo se usa una vez: si existe, la primera carga toma de él el
+nombre, la población y la superficie de la biblioteca (ver servidor.py,
+registrar_biblioteca). Después todo vive en la configuración.
 
 Columnas esperadas (la cabecera puede ir en cualquier orden):
 

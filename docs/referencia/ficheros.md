@@ -2,31 +2,31 @@
 
 ## Carpeta de datos
 
-En el zip, `datos/` junto al programa; en el servidor, `/var/lib/bildumargi`.
+En Windows, `%LOCALAPPDATA%\Bildumargi\datos`; con el zip, `datos/` junto al
+programa; en el servidor, `/var/lib/bildumargi`.
 
 ```
-bibliotecas.xlsx         Directorio de bibliotecas (con claves)
+configuracion.json       Toda la configuración (biblioteca, apariencia, DILVE…)
 pautas.json              Referencia de fondo por habitante
-configuracion_red.json   Configuración de la red (se crea al guardar)
-valoraciones.db          Valoraciones y comentarios (¡copia de seguridad!)
-base_red.db              Catálogo colectivo (generado con conversor.py)
+marc_idiomas.db          Idioma de los ejemplares, extraído del catálogo MARC
 dilve/novedades.db       Novedades de DILVE
-dilve/fichas.db          Fichas de DILVE por ISBN
+dilve/fichas.db          Fichas de DILVE por ISBN (también las de las series)
+dilve/credenciales.json  Cuenta de DILVE (si se escribió en Configuración)
+dilve/cuota.json         Llamadas de hoy, bloqueos y avisos de DILVE
 materias_secciones.json  (opcional) Materias -> secciones
 afinidad.json            (opcional) Pesos del modelo de préstamo
 thema_es.json            (opcional) Encabezados Thema de EDItEUR
-bibliotecas/             Una carpeta por biblioteca
+bibliotecas/             El historial de la biblioteca
+registro.txt             (Windows) Mensajes del programa, para resolver problemas
 ```
 
-## Carpeta de cada biblioteca
+## Carpeta de la biblioteca
 
 ```
-bibliotecas/biblioteca-de-monteagudo/
-  biblioteca.txt           Nombre de la biblioteca
-  preferencias.json        Su configuración
-  signaturas.json          Su tabla de secciones por signatura (si la tiene)
-  cargas/20260919-093012/  Una carpeta por carga, con los listados
-    resumen.json           Indicadores de la carga, para Seguimiento
+bibliotecas/biblioteca/
+  sugerencias_autores.json Último cálculo de «Autores más prestados»
+  cargas/20261006-165233/  Una carpeta por carga, con los listados
+    resumen.json           Indicadores de la carga, altas y bajas
 ```
 
 ## Variables de entorno
@@ -34,7 +34,8 @@ bibliotecas/biblioteca-de-monteagudo/
 | Variable | Para qué |
 |---|---|
 | `BILDUMARGI_DATOS` | Carpeta de datos. |
-| `BILDUMARGI_CACHE` | Carpeta de caché. |
-| `BILDUMARGI_DB_URL` | Dirección de la base del catálogo de la red. |
-| `BILDUMARGI_CLAVE_ADMIN` | Clave de administración. |
-| `BILDUMARGI_DILVE_USUARIO`, `BILDUMARGI_DILVE_CLAVE` | Credenciales de DILVE. |
+| `BILDUMARGI_CLAVE_ADMIN` | Clave de configuración. |
+| `BILDUMARGI_DILVE_USUARIO`, `BILDUMARGI_DILVE_CLAVE` | Cuenta de DILVE. |
+
+Con el zip, lo mismo puede ir en `config_local.py` (ver
+[Ajustes avanzados](../administracion/ajustes-avanzados.md)).

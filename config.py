@@ -3,9 +3,8 @@
 Bildumargi · Configuración
 ==========================
 
-Este es el ÚNICO fichero que hay que tocar para poner Bildumargi en marcha.
-Todo lo que viene después de la sección 1 tiene valores por defecto que
-funcionan tal cual.
+Todo tiene valores por defecto que funcionan tal cual. Las claves y lo
+propio de cada ordenador van en config_local.py (ver el README).
 
 Creado por: Asier Urkia · bildumargi@gmail.com
 Licencia: GNU Affero General Public License v3 (AGPLv3). Ver LICENSE.
@@ -16,28 +15,12 @@ import os
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 
 # Versión del paquete. Se muestra al arrancar y en la cabecera de la aplicación.
-VERSION = "1.1"
+VERSION = "2.0"
 
 
 # ===========================================================================
-# 1. ENLACE A LA BASE DE DATOS DE LA RED
-# ===========================================================================
-# Escribe aquí, entre las comillas, la dirección de descarga directa del
-# fichero .db de tu red de bibliotecas, o la ruta a un .db guardado en este
-# mismo ordenador o servidor. Ese .db se genera con `conversor.py` a partir
-# de los ficheros MARC (.mods) de tu catálogo.
-#
-#   Ejemplo con Dropbox : "https://www.dropbox.com/scl/fi/xxxx/base.db?rlkey=yyyy&dl=1"
-#   Ejemplo con ruta local: "datos/base_red.db"
-#
-# Si se deja vacío (""), Bildumargi funciona igualmente: analiza la colección
-# propia a partir de los listados de AbsysNet y oculta automáticamente la
-# sección de recomendaciones de compra, que necesita el catálogo de la red.
-
-URL_BASE_DATOS = ""
-
-# ===========================================================================
-# 2. RESTO DE OPCIONES (no hace falta tocar nada)
+# Opciones (no hace falta tocar nada; lo propio de cada ordenador, como las
+# claves, va en config_local.py)
 # ===========================================================================
 
 # Carpeta de datos: todo lo que Bildumargi guarda (bases de datos, historial
@@ -50,16 +33,13 @@ URL_BASE_DATOS = ""
 DATOS_DEL_PROGRAMA = os.path.join(RAIZ, "datos")      # los que trae el programa
 RUTA_DATOS = os.environ.get("BILDUMARGI_DATOS") or DATOS_DEL_PROGRAMA
 
-# Fichero con las bibliotecas de la red, sus códigos de sucursal, población
-# y superficie. Ver el README: es la otra pieza que conviene personalizar.
-RUTA_BIBLIOTECAS = os.path.join(RUTA_DATOS, "bibliotecas.xlsx")
+# Configuración de la biblioteca (nombre, población, apariencia, pestañas,
+# historial, signaturas, DILVE). Se cambia desde la pantalla Configuración.
+RUTA_CONFIGURACION = os.path.join(RUTA_DATOS, "configuracion.json")
 
-# Carpeta donde se guarda la copia descargada de la base de datos. Por
-# defecto, «cache» junto al programa; si los datos van a otra carpeta, dentro
-# de ella; y con BILDUMARGI_CACHE, donde se indique.
-RUTA_CACHE = (os.environ.get("BILDUMARGI_CACHE")
-              or (os.path.join(RUTA_DATOS, "cache") if os.environ.get("BILDUMARGI_DATOS")
-                  else os.path.join(RAIZ, "cache")))
+# Directorio de bibliotecas de la 1.x: solo se lee, si existe, para importar
+# los datos de la biblioteca la primera vez.
+RUTA_BIBLIOTECAS = os.path.join(RUTA_DATOS, "bibliotecas.xlsx")
 
 # Dirección y puerto del servidor local.
 #   "127.0.0.1" -> solo accesible desde este ordenador.
@@ -67,14 +47,17 @@ RUTA_CACHE = (os.environ.get("BILDUMARGI_CACHE")
 HOST = "127.0.0.1"
 PUERTO = 8000
 
-# Nombre de la red, que aparece en la cabecera de la aplicación.
-NOMBRE_RED = "Red de Bibliotecas"
+# Nombre de la red a la que pertenece la biblioteca, en la cabecera. Vacío =
+# ninguno. Se cambia en Configuración → Tu biblioteca; esto es solo el valor
+# de partida.
+NOMBRE_RED = ""
 
 # Idioma inicial de la interfaz: "es" (castellano) o "eu" (euskera).
-IDIOMA_POR_DEFECTO = "es"   # es · eu · ca · gl · en (cada biblioteca puede cambiarlo en Configuración)
+IDIOMA_POR_DEFECTO = "es"   # es · eu · ca · gl · en (se puede cambiar en Configuración)
 
-# Año de referencia para los filtros cronológicos.
-ANIO_ACTUAL = 2026
+# Año de referencia para los filtros cronológicos: el año en curso.
+import datetime as _datetime  # noqa: E402
+ANIO_ACTUAL = _datetime.date.today().year
 
 # Minutos que una sesión de análisis permanece en memoria sin usarse.
 MINUTOS_SESION = 180
@@ -90,56 +73,35 @@ URL_CODIGO_FUENTE = "https://github.com/96urkia/bildumargi"
 # Texto que acompaña al enlace anterior en el pie.
 LICENCIA = "AGPLv3"
 
-# ---------------------------------------------------------------------------
-# Valoraciones entre bibliotecas
-# ---------------------------------------------------------------------------
-# Permite que cada biblioteca puntúe y comente los títulos del catálogo de la
-# red. Tiene sentido en un despliegue CENTRAL (una sola instalación en el
-# servidor de la red, a la que entran las demás por la intranet): ahí todo el
-# mundo escribe y lee en el mismo sitio. En una instalación local de una sola
-# biblioteca, las valoraciones no las ve nadie más; ponlo en False si no las
-# quieres.
-VALORACIONES_ACTIVAS = True
-
-# Fichero donde se guardan. Es independiente del .db del catálogo A PROPÓSITO:
-# ese se regenera con conversor.py cada vez que se actualiza el fondo, y las
-# valoraciones se perderían con él. Haz copia de seguridad de este fichero.
-RUTA_VALORACIONES = os.path.join(RUTA_DATOS, "valoraciones.db")
-
 # Carpeta de cada biblioteca: sus preferencias y el historial de sus cargas
 # (datos/bibliotecas/<biblioteca>/). Se crea sola.
 RUTA_BIBLIOTECAS_DATOS = os.path.join(RUTA_DATOS, "bibliotecas")
 
-# Preferencias de versiones anteriores, todas en un fichero: si existe, se
-# lee como respaldo hasta que cada biblioteca guarde las suyas.
-RUTA_PREFERENCIAS = os.path.join(RUTA_DATOS, "preferencias.json")
-
-# Configuración de la red (pestañas, idiomas, apariencia por defecto e
-# historial para todas las bibliotecas). Solo se cambia desde Configuración →
-# Administración de la red, con esta clave. Vacía = administración desactivada.
-# Mejor fijarla con la variable de entorno BILDUMARGI_CLAVE_ADMIN que escribirla aquí.
+# Clave para cambiar la configuración. Vacía = sin clave (lo normal en un
+# solo ordenador). En un servidor al que entran varias personas, conviene
+# ponerla en config_local.py o en la variable de entorno BILDUMARGI_CLAVE_ADMIN.
 CLAVE_ADMIN = os.environ.get("BILDUMARGI_CLAVE_ADMIN", "")
-
-RUTA_CONFIG_RED = os.path.join(RUTA_DATOS, "configuracion_red.json")
 
 # Novedades de DILVE. La base vive SIEMPRE aquí y con este nombre, para poder
 # copiarla de una versión de Bildumargi a la siguiente sin volver a descargarla.
 RUTA_DILVE = os.path.join(RUTA_DATOS, "dilve", "novedades.db")
 RUTA_DILVE_CREDENCIALES = os.path.join(RUTA_DATOS, "dilve", "credenciales.json")
-# Fichas de DILVE ya descargadas, compartidas por toda la red: los títulos más
-# prestados se repiten de una biblioteca a otra y así no se piden dos veces.
+# Fichas de DILVE ya descargadas: lo que ya se tiene no se vuelve a pedir.
 RUTA_DILVE_FICHAS = os.path.join(RUTA_DATOS, "dilve", "fichas.db")
-# Tabla propia materias -> signatura, si la red quiere ajustarla.
+# Idioma de los ejemplares extraído del catálogo MARC (.db de conversor.py):
+# un fichero pequeño, para no leer cada vez un .db de más de un gigabyte.
+RUTA_MARC_IDIOMAS = os.path.join(RUTA_DATOS, "marc_idiomas.db")
+# Tabla propia materias -> signatura, si se quiere ajustar.
 RUTA_MATERIAS = os.path.join(RUTA_DATOS, "materias_secciones.json")
-# Mejor con variables de entorno que escritas en disco:
+# Mejor con variables de entorno o en config_local.py que escritas aquí:
 DILVE_USUARIO = os.environ.get("BILDUMARGI_DILVE_USUARIO", "")
 DILVE_CLAVE = os.environ.get("BILDUMARGI_DILVE_CLAVE", "")
 DILVE_BASE = os.environ.get("BILDUMARGI_DILVE_BASE", "https://www.dilve.es/dilve/dilve/")
 
 
 # Ficheros de partida que trae el programa y que se copian a la carpeta de
-# datos la primera vez, si no están (nunca se sobrescriben: la red los edita).
-FICHEROS_INICIALES = ("bibliotecas.xlsx", "pautas.json", "materias_secciones.json")
+# datos la primera vez, si no están (nunca se sobrescriben: se pueden editar).
+FICHEROS_INICIALES = ("pautas.json", "materias_secciones.json")
 
 
 def preparar_carpeta_datos():
@@ -160,8 +122,10 @@ def preparar_carpeta_datos():
             shutil.copy2(origen, destino)
 
 
-def url_base_datos() -> str:
-    """Permite sobreescribir la URL con la variable de entorno
-    BILDUMARGI_DB_URL, útil en despliegues de servidor donde no se quiere
-    editar el fichero."""
-    return (os.environ.get("BILDUMARGI_DB_URL") or URL_BASE_DATOS or "").strip()
+# Ajustes propios de este ordenador (rutas, claves): en config_local.py, junto
+# a este fichero. No se sube al repositorio ni entra en el zip, así que las
+# claves no salen nunca de aquí. Lo que se escriba allí manda sobre lo de arriba.
+_CONFIG_LOCAL = os.path.join(RAIZ, "config_local.py")
+if os.path.exists(_CONFIG_LOCAL):
+    with open(_CONFIG_LOCAL, encoding="utf-8") as _f:
+        exec(compile(_f.read(), _CONFIG_LOCAL, "exec"))

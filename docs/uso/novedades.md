@@ -1,15 +1,17 @@
 # Novedades de DILVE
 
 **Novedades** muestra las altas recientes de DILVE, la base del libro en venta
-en España, en una rejilla de portadas. Aparece si la red tiene acceso a DILVE.
+en España, en una rejilla de portadas. Aparece cuando hay una cuenta de DILVE
+y se han descargado las novedades (Bildumargi lo hace solo la primera vez y
+las actualiza cada semana).
 
 ![Novedades del libro español en rejilla de portadas (portadas difuminadas en el manual)](../img/novedades-rejilla.png)
 
 ## Filtros
 
 - **Primera fila**: idioma, editorial, sección (la que le daría tu
-  biblioteca), formato (rústica, tapa dura, libro de cartón, audiolibro…), materia
-  Thema y el buscador.
+  biblioteca), formato (rústica, tapa dura, libro de cartón, audiolibro…),
+  materia Thema y el buscador.
 - **Segunda fila**: las opciones de orden y de qué se ve.
 
 El buscador busca en título, autor, colección, editorial, resumen y palabras
@@ -52,10 +54,9 @@ préstamo de lo que compró después, y compara el resultado con otros órdenes 
 con el azar. Sirve para comprobar si el modelo acierta en tu biblioteca.
 
 !!! tip "Cuantas más fichas, mejor"
-    El modelo aprende de las fichas DILVE de tu propio fondo. Cada vez que se
-    calcula «Autores más prestados» se descargan más. Si la comparación dice
-    que hay pocos títulos de prueba, calcula «Autores más prestados» un par de
-    veces y vuelve a probar.
+    El modelo aprende de las fichas DILVE de tu propio fondo. Para que aprenda
+    de todo, descarga las [fichas de todo el catálogo](../administracion/dilve.md#fichas-de-todo-el-catalogo)
+    una vez.
 
 ## Un libro en varias secciones
 

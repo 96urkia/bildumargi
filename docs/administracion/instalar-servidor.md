@@ -2,7 +2,10 @@
 
 Para **Debian 12, Debian 13 y Ubuntu 24.04** hay un paquete `.deb` que
 instala Bildumargi como un servicio más del sistema: arranca solo, se
-actualiza con `apt` y guarda los datos aparte del programa.
+actualiza con `apt` y guarda los datos aparte del programa. Es la opción para
+que varios ordenadores de la biblioteca usen el mismo Bildumargi desde el
+navegador; para un solo ordenador, lo habitual es el
+[instalador de Windows](instalar-windows.md).
 
 Esta guía usa Debian 13. En las otras dos distribuciones los pasos son los
 mismos; solo cambia el paquete.
@@ -52,7 +55,7 @@ grep deb13 SHA256SUMS
 ```
 
 !!! info "Por qué el nombre lleva un punto"
-    El paquete se llama, por ejemplo, `bildumargi_1.1-1.deb13_amd64.deb`.
+    El paquete se llama, por ejemplo, `bildumargi_2.0-1.deb13_amd64.deb`.
     GitHub cambia la `~` del nombre original por un punto al publicarlo. Por
     eso los comandos usan comodines (`bildumargi*deb13*.deb`), que valen para
     cualquier versión.
@@ -64,13 +67,13 @@ sudo apt install ./bildumargi*deb13*.deb
 ```
 
 `apt` instala Bildumargi y lo que necesita (Python y sus librerías), crea un
-usuario propio para el servicio, genera una clave de administración y deja
+usuario propio para el servicio, genera una clave de configuración y deja
 Bildumargi arrancado.
 
 ![Salida de apt al instalar el paquete de Bildumargi en Debian 13](../img/srv-instalacion.png)
 
 Las líneas que importan son **«Configurando bildumargi»** y **«clave de
-administración creada en /etc/bildumargi/secretos.env»**.
+configuración creada en /etc/bildumargi/secretos.env»**.
 
 !!! note "El aviso «Notice: … Permiso denegado»"
     Sale si el paquete está en tu carpeta personal, como en la captura. `apt`
@@ -85,7 +88,7 @@ bildumargi version
 sudo systemctl status bildumargi
 ```
 
-Debe responder **Bildumargi 1.1** y mostrar **active (running)** en verde.
+Debe responder **Bildumargi 2.0** y mostrar **active (running)** en verde.
 Pulsa ++q++ para salir.
 
 ![Estado del servicio de Bildumargi: active (running)](../img/srv-estado-servicio.png)
@@ -93,30 +96,32 @@ Pulsa ++q++ para salir.
 La última línea indica dónde escucha: `http://127.0.0.1:8765`, es decir, solo
 desde el propio servidor. Para abrirlo desde otros equipos, ver el paso 8.
 
-## 5. Apunta la clave de administración
+## 5. Apunta la clave de configuración
 
 ```
 sudo cat /etc/bildumargi/secretos.env
 ```
 
-![Fichero de claves con la clave de administración (oculta en la captura) y las líneas de DILVE vacías](../img/srv-secretos.png)
+![Fichero de claves con la clave de configuración (oculta en la captura) y las líneas de DILVE vacías](../img/srv-secretos.png)
 
-La clave de administración sirve para entrar en
-[Administración de la red](panel-red.md). Guárdala en un sitio seguro. Las
-dos líneas de DILVE se rellenan en el paso 7.
+La clave sirve para abrir la [Configuración](../uso/configuracion.md) desde
+cualquier ordenador: así solo la cambia quien la sepa (ver
+[Ajustes avanzados](ajustes-avanzados.md#clave-de-configuracion)). Guárdala en
+un sitio seguro. Las dos líneas de DILVE se rellenan en el paso 7.
 
 ## 6. Ábrelo
 
 En el navegador del servidor, abre `http://127.0.0.1:8765`. Aparece el
 asistente de carga:
 
-![Primera pantalla de Bildumargi recién instalado, con el aviso de que no hay base de datos de la red enlazada](../img/srv-primera-pantalla.png)
+![Primera pantalla de Bildumargi recién instalado](../img/srv-primera-pantalla.png)
 
-El aviso de arriba («Sin base de datos enlazada») es normal mientras no se
-conecte el [catálogo colectivo de la red](catalogo-red.md): el análisis de la
-colección propia funciona igualmente.
+Los datos de la biblioteca (nombre, población, superficie) se escriben en la
+propia aplicación, en [Configuración](../uso/configuracion.md). Si sale un
+aviso de que falta la cuenta de DILVE, es normal hasta el paso 7: el análisis
+de la colección funciona igualmente.
 
-## 7. Configura los datos de la red
+## 7. Configura DILVE
 
 ### Dónde está cada cosa
 
@@ -124,12 +129,11 @@ colección propia funciona igualmente.
 |---|---|
 | El programa (no se modifica) | `/usr/lib/bildumargi` |
 | Ajustes: dirección, puerto, carpeta de datos | `/etc/bildumargi/bildumargi.env` |
-| Claves: administración y DILVE | `/etc/bildumargi/secretos.env` |
-| Datos: directorio, valoraciones, historial, DILVE | `/var/lib/bildumargi` |
+| Claves: configuración y DILVE | `/etc/bildumargi/secretos.env` |
+| Datos: configuración, historial, DILVE | `/var/lib/bildumargi` |
 | Mensajes del programa | `journalctl -u bildumargi` |
 
-La carpeta de datos pertenece al usuario del servicio y está protegida,
-porque contiene las claves de las bibliotecas y las valoraciones de la red.
+La carpeta de datos pertenece al usuario del servicio y está protegida.
 Para ver lo que hay dentro hace falta `sudo`:
 
 ```
@@ -138,50 +142,7 @@ sudo ls -l /var/lib/bildumargi
 
 ![Contenido de la carpeta de datos de Bildumargi](../img/srv-carpeta-datos.png)
 
-### El directorio de bibliotecas
-
-El paquete trae una plantilla de `bibliotecas.xlsx` con tres filas de
-ejemplo. Hay que sustituirla por el directorio de la red (ver
-[Directorio de bibliotecas](directorio.md)). Hay dos formas de editarlo.
-
-=== "Copiarlo, editarlo y devolverlo"
-
-    ```
-    sudo cp /var/lib/bildumargi/bibliotecas.xlsx ~/
-    sudo chown $USER: ~/bibliotecas.xlsx
-    ```
-
-    Edítalo con LibreOffice Calc y guárdalo en formato Excel («Usar formato
-    Excel 2007-365»). Después, devuélvelo:
-
-    ```
-    sudo cp ~/bibliotecas.xlsx /var/lib/bildumargi/
-    sudo chown bildumargi:bildumargi /var/lib/bildumargi/bibliotecas.xlsx
-    ```
-
-=== "Darte permiso sobre la carpeta"
-
-    Añade tu usuario al grupo del servicio y da permisos al grupo:
-
-    ```
-    sudo usermod -aG bildumargi $USER
-    sudo chmod 2770 /var/lib/bildumargi
-    sudo chmod 660 /var/lib/bildumargi/bibliotecas.xlsx
-    ```
-
-    Cierra la sesión y vuelve a entrar. Desde entonces puedes abrir la
-    carpeta en el gestor de archivos y editar el Excel directamente:
-
-    ![La carpeta de datos abierta en el gestor de archivos](../img/srv-carpeta-gestor.png)
-
-    !!! warning
-        Con este permiso, tu usuario puede ver y modificar **todos** los datos
-        de Bildumargi. Solo debe tenerlo quien administre la red.
-
-En los dos casos no hace falta reiniciar: Bildumargi relee el directorio en
-cuanto cambia.
-
-### Las credenciales de DILVE (opcional)
+### La cuenta de DILVE (opcional)
 
 ```
 sudo nano /etc/bildumargi/secretos.env
@@ -202,10 +163,10 @@ sudo systemctl restart bildumargi
 
 Más detalles en [DILVE](dilve.md).
 
-## 8. Publícalo en la red
+## 8. Publícalo en la intranet
 
-Bildumargi escucha solo en el propio servidor. Para que lo usen las
-bibliotecas, se publica detrás de **nginx**, que no se instala solo:
+Bildumargi escucha solo en el propio servidor. Para que lo usen los demás
+ordenadores, se publica detrás de **nginx**, que no se instala solo:
 
 ```
 sudo apt install -y nginx
@@ -240,7 +201,6 @@ sudo nginx -t && sudo systemctl reload nginx
     }
     ```
 
-
 ## Reiniciar y consultar el servicio
 
 | Para | Orden |
@@ -249,10 +209,10 @@ sudo nginx -t && sudo systemctl reload nginx
 | Reiniciarlo | `sudo systemctl restart bildumargi` |
 | Ver sus mensajes | `journalctl -u bildumargi -n 50` |
 | Ver la versión | `bildumargi version` |
-| Generar la base del catálogo | `sudo bildumargi conversor fichero.mrc` |
+| Generar el `.db` del catálogo MARC | `sudo bildumargi conversor fichero.mrc` |
 
-**Hay que reiniciar** al cambiar `secretos.env` o `bildumargi.env`. **No hace
-falta** al cambiar `bibliotecas.xlsx`. Bildumargi arranca solo con el sistema.
+**Hay que reiniciar** al cambiar `secretos.env` o `bildumargi.env`. Bildumargi
+arranca solo con el sistema.
 
 ## Probarlo en una máquina virtual
 
