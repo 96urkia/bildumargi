@@ -50,10 +50,6 @@ Al terminar, deja marcado **Abrir Bildumargi**.
 Con el acceso directo del escritorio o desde el menú Inicio. Bildumargi se
 abre en **su propia ventana**; al cerrarla se cierra todo.
 
-!!! note "Captura pendiente"
-    `img/win-acceso-directo.png` — el acceso directo de Bildumargi en el
-    escritorio.
-
 Sigue con [Tu primer diagnóstico](../empezar/primer-diagnostico.md).
 
 ## Dónde se guardan los datos

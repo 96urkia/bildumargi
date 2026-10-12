@@ -11,9 +11,9 @@ Recomendaciones: ventana de al menos 1400 px de ancho, mismo tema en todas,
 sin claves, fechas ni datos personales a la vista. Las portadas y los
 resúmenes de DILVE se difuminan.
 
-## Faltan (4)
+## Opcionales (4)
 
-Están marcadas con un recuadro «Captura pendiente» en su página.
+El manual funciona sin ellas. Si se hacen, se añaden en su página.
 
 | Fichero | Página | Qué debe verse |
 |---|---|---|

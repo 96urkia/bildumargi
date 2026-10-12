@@ -4,10 +4,6 @@ La pestaña **Seguimiento** muestra cómo evoluciona tu fondo análisis a
 análisis. Aparece si el historial de cargas está activado (lo está por
 defecto; se cambia en [Configuración](configuracion.md)).
 
-!!! note "Captura pendiente"
-    `img/seguimiento.png` — pestaña Seguimiento: indicadores con el cambio,
-    evolución entre cargas, cargas guardadas y, al lado, altas y bajas.
-
 ## Evolución
 
 - La evolución de **volúmenes**, **circulación**, **fondo de los últimos 5

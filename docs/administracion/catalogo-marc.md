@@ -48,10 +48,6 @@ En [Configuración](../uso/configuracion.md), apartado **Catálogo MARC
 (idioma)**, escribe la ruta del `.db` y pulsa **Extraer los idiomas** (hace
 falta tener un análisis abierto).
 
-!!! note "Captura pendiente"
-    `img/config-marc.png` — Configuración, apartado Catálogo MARC, con la ruta
-    y el resultado de la extracción.
-
 Bildumargi reconoce tu biblioteca en el `.db` por los códigos de barras y
 copia **solo el idioma de tus ejemplares** a un fichero pequeño
 (`marc_idiomas.db`, unos cientos de KB). Si el `.db` es el de la red, guarda

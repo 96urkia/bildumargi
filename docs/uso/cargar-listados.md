@@ -4,10 +4,6 @@ La pantalla de inicio de Bildumargi es un **asistente** que pide un fichero
 por paso. Si ya hay algún análisis guardado, encima aparece **Último
 análisis**, para abrirlo sin volver a subir nada.
 
-!!! note "Captura pendiente"
-    `img/asistente-completo.png` — pantalla de inicio: el recuadro «Último
-    análisis» arriba y el asistente de carga debajo.
-
 ## Paso a paso
 
 1. **Topográfico.** Arrastra el fichero al recuadro o pulsa **Elegir
