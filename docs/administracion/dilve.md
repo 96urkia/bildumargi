@@ -27,6 +27,8 @@ apartado **Novedades del libro español (DILVE)**:
 - **Solo papel**: opcional.
 - **Máximo de llamadas al día y pausa entre llamadas**: el freno (ver abajo).
 
+![Configuración, apartado Novedades del libro español (DILVE); usuario y base difuminados](../img/config-dilve.png)
+
 En un servidor también se pueden poner en `/etc/bildumargi/secretos.env`
 (ver [Instalar en un servidor Linux](instalar-servidor.md)).
 
@@ -47,9 +49,7 @@ el aviso que aparece si se conoce el idioma de poco fondo. **Nunca empieza
 sola**: primero enseña las cifras con un aviso bien visible y solo empieza si
 confirmas.
 
-!!! note "Captura pendiente"
-    `img/catalogo-dilve-aviso.png` — el aviso «Antes de empezar, lee esto»
-    con las llamadas y los minutos.
+![Aviso «Antes de empezar, lee esto»: 70 llamadas a DILVE, unos 7 minutos](../img/catalogo-dilve-aviso.png)
 
 DILVE admite 128 ISBN por llamada. Como orientación:
 

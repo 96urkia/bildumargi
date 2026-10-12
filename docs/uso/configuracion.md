@@ -5,9 +5,7 @@ Es una sola, la de tu biblioteca, ordenada en apartados con un **menú a la
 izquierda**. Los cambios se guardan con **Guardar**; si cierras sin guardar,
 se deshacen.
 
-!!! note "Captura pendiente"
-    `img/configuracion.png` — Configuración: el menú lateral a la izquierda y
-    el apartado «Tu biblioteca» abierto.
+![Configuración: el menú lateral y el apartado «Tu biblioteca» (datos difuminados)](../img/configuracion.png)
 
 ## Tu biblioteca
 

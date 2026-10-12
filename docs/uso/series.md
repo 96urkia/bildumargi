@@ -5,10 +5,7 @@ Futbolísimos», «Geronimo Stilton», «Harry Potter»…) y te dice, de cada u
 qué tomos tienes, cuánto se prestan y **cuáles faltan**. Funciona con las
 fichas de DILVE de tu catálogo (ver [DILVE](../administracion/dilve.md)).
 
-!!! note "Captura pendiente"
-    `img/series-panel.png` — pestaña Series: recuadros con portada, número de
-    tomos, años, barra de préstamo y etiquetas «Faltan» y «posterior»
-    (portadas difuminadas en el manual).
+![Pestaña Series: un recuadro por serie con portada, tomos, años, préstamo y tomos que faltan (portadas difuminadas)](../img/series-panel.png)
 
 ## Un recuadro por serie
 
@@ -36,9 +33,7 @@ Al pulsar un recuadro se abre la lista de tomos:
 | **Préstamos** | Los del listado de más prestados; si no, si ha salido o no. |
 | **Estado** | **En la biblioteca**, **Falta** (hueco en la numeración), **Posterior: falta** (con su fecha de publicación) o **Posiblemente de esta serie**. |
 
-!!! note "Captura pendiente"
-    `img/series-detalle.png` — detalle de una serie: miniaturas, número,
-    título, año, préstamos y estado, con los tomos que faltan en ámbar.
+![Detalle de una serie: número, título, año, préstamos y estado de cada tomo](../img/series-detalle.png)
 
 Debajo hay dos botones:
 

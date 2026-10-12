@@ -46,9 +46,7 @@ La primera vez se calcula en segundo plano: verás un aviso de progreso. El
 resultado se guarda y no se vuelve a calcular mientras tu préstamo no cambie;
 para rehacerlo está **Volver a calcular**.
 
-!!! note "Captura pendiente"
-    `img/compras-autores.png` — Autores más prestados: lista de obras con la
-    explicación por autor (portadas difuminadas en el manual).
+![Autores más prestados: obras del mismo autor que no tienes, con sus libros y préstamos en tu fondo (portadas y resúmenes difuminados)](../img/compras-autores.png)
 
 ### Novedades
 

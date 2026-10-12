@@ -37,12 +37,11 @@ cosas. **Todas son opcionales** y se pueden cambiar después en
 3. **Catálogo MARC**: el fichero `.db` del catálogo, con el botón
    **Examinar** (ver [Catálogo MARC](catalogo-marc.md)).
 
-!!! note "Captura pendiente"
-    `img/win-instalador-biblioteca.png` — instalador: pantalla «Tu biblioteca».
+![Instalador: pantalla «Tu biblioteca», con nombre, red, habitantes y superficie](../img/win-instalador-biblioteca.png)
 
-!!! note "Captura pendiente"
-    `img/win-instalador-dilve.png` — instalador: pantalla «Cuenta de DILVE»
-    (contraseña oculta).
+![Instalador: pantalla «Cuenta de DILVE», con usuario y contraseña](../img/win-instalador-dilve.png)
+
+![Instalador: pantalla «Catálogo MARC», con el botón Examinar](../img/win-instalador-marc.png)
 
 Al terminar, deja marcado **Abrir Bildumargi**.
 
