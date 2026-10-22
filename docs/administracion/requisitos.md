@@ -1,6 +1,6 @@
 # Requisitos y modos de uso
 
-Bildumargi 2.0 está pensado para que **cada biblioteca** lo instale y lo use
+Desde la 2.0, Bildumargi está pensado para que **cada biblioteca** lo instale y lo use
 por su cuenta, con sus datos, su configuración y su cuenta de DILVE.
 
 ## Modos de uso

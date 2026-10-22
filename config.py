@@ -15,7 +15,7 @@ import os
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 
 # Versión del paquete. Se muestra al arrancar y en la cabecera de la aplicación.
-VERSION = "2.0"
+VERSION = "2.1"
 
 
 # ===========================================================================

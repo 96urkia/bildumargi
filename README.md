@@ -7,11 +7,11 @@ el estado real del fondo: qué se presta y qué no se ha movido nunca, cómo se
 reparte la colección por materias y lenguas, qué tramos están envejecidos, qué
 series están incompletas y qué conviene comprar.
 
-La versión 2.0 está pensada para que **cada biblioteca** lo instale en su
+Desde la versión 2.0 está pensado para que **cada biblioteca** lo instale en su
 ordenador, con sus datos y su cuenta de DILVE. Los listados no salen del
 equipo y no hace falta publicarlo en internet.
 
-**Versión 2.0** · Licencia AGPLv3 · Castellano, euskera, catalán, gallego e inglés.
+**Versión 2.1** · Licencia AGPLv3 · Castellano, euskera, catalán, gallego e inglés.
 
 **Manual de uso:** <https://96urkia.github.io/bildumargi/>
 
@@ -22,7 +22,7 @@ equipo y no hace falta publicarlo en internet.
 
 ## Instalar en Windows (lo habitual)
 
-1. Descarga `Bildumargi-2.0-instalador.exe` de la página de versiones.
+1. Descarga `Bildumargi-2.1-instalador.exe` de la página de versiones.
 2. Ábrelo con doble clic. No pide permisos de administrador. Si Windows avisa
    de que «protegió su PC», pulsa **Más información → Ejecutar de todas formas**
    (es un programa libre sin firma comercial).
@@ -57,7 +57,7 @@ Para que varios ordenadores de la biblioteca usen el mismo Bildumargi desde
 el navegador. Hay un `.deb` para Debian 12, Debian 13 y Ubuntu 24.04:
 
 ```
-sudo apt install ./bildumargi_2.0-1~ubuntu24.04_amd64.deb
+sudo apt install ./bildumargi_2.1-1~ubuntu24.04_amd64.deb
 ```
 
 Queda como servicio en `127.0.0.1:8765`, con una clave de configuración
@@ -264,8 +264,8 @@ bloque `es` con un código nuevo, se traduce y se añade a `IDIOMAS_INTERFAZ`.
 Al subir una etiqueta:
 
 ```
-git tag -a v2.0 -m "Bildumargi 2.0"
-git push origin v2.0
+git tag -a v2.1 -m "Bildumargi 2.1"
+git push origin v2.1
 ```
 
 GitHub (`.github/workflows/publicar.yml`) construye el zip, los tres `.deb`

@@ -1,8 +1,8 @@
 # Publicar una versión de Bildumargi.
 #
 # Se pone en marcha al subir una etiqueta que empiece por «v», por ejemplo:
-#   git tag -a v2.0 -m "Bildumargi 2.0"
-#   git push origin v2.0
+#   git tag -a v2.1 -m "Bildumargi 2.1"
+#   git push origin v2.1
 #
 # Construye el zip de siempre, un paquete .deb por distribución y el
 # instalador de Windows, prueba a instalar cada .deb en un sistema limpio y lo

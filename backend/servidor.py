@@ -230,9 +230,10 @@ def _conservar_tomos_de_series(base, isbns):
         series = set()
     if not series:
         return
+    claves = {mod_series.clave_serie(n) for n in series}
     candidatas = [f for f in base.leer_fichas(isbns).values()
-                  if f.get("coleccion") in series
-                  and mod_series.numero_de(f, f.get("coleccion")) is not None]
+                  if mod_series.clave_serie(f.get("serie") or f.get("coleccion")) in claves
+                  and mod_series.numero_de(f, f.get("serie") or f.get("coleccion")) is not None]
     if candidatas:
         fichas.guardar(candidatas)
 
@@ -1279,18 +1280,23 @@ def series_sesion(sesion):
         if novedades is not None and novedades.conn:
             for isbn, f in novedades.colecciones_de([i for i in isbns if i not in propias]).items():
                 propias[isbn] = f
-        nombres = {f["coleccion"] for f in propias.values()}
-        conocidas = fichas.colecciones(nombres)
-        if novedades is not None and novedades.conn:
-            for nombre, lista in novedades.colecciones(nombres).items():
+        # Lo que se sabe de esas series, también con el nombre escrito de otra
+        # forma («Harry Potter [edición…]») y en las novedades descargadas
+        claves = {mod_series.clave_serie(f["coleccion"]) for f in propias.values()}
+        conocidas = {}
+        for base in (fichas, novedades):
+            if base is None or not base.conn:
+                continue
+            nombres = [n for n in base.nombres_de_colecciones() if mod_series.clave_serie(n) in claves]
+            for nombre, lista in base.colecciones(nombres).items():
                 conocidas.setdefault(nombre, []).extend(lista)
         sesion.series = mod_series.detectar(sesion.registros, propias, conocidas,
                                             CONFIG.leer().get("series_ocultas") or [])
         # Se apuntan, para conservar sus tomos cuando salgan de las novedades
         try:
+            de_series = {c for x in sesion.series for c in x["claves"]}
             fichas.escribir("series_biblioteca", json.dumps(
-                sorted({n for x in sesion.series for n in conocidas if mod_series._clave(n) == x["clave"]}),
-                ensure_ascii=False))
+                sorted({n for n in conocidas if mod_series.clave_serie(n) in de_series}), ensure_ascii=False))
         except Exception:                                       # noqa: BLE001
             pass
     return sesion.series
@@ -1298,14 +1304,23 @@ def series_sesion(sesion):
 
 # --- Completar las series: los tomos que la biblioteca no tiene ---------------
 DIAS_RELEER_SERIES = 30      # las fichas de los tomos propios se renuevan al mes
+MAX_SEGUNDO_SALTO = 20 * mod_dilve.MAX_POR_LLAMADA   # tope de ISBN del segundo salto en cada búsqueda
 
 
 def _candidatos_series(sesion):
-    """ISBN que pueden ser tomos de las series de la biblioteca y aún no
-    tienen ficha: los «del mismo autor» que dan las fichas de DILVE de los
-    tomos propios y los libros de esos autores en el catálogo de la red (si
-    se extrajo del MARC). Y los tomos propios cuya ficha tiene más de un mes,
-    para que su lista de «otras obras del autor» recoja los tomos nuevos.
+    """ISBN que pueden ser tomos de las series de la biblioteca:
+
+    primer salto   los «del mismo autor» que dan las fichas de DILVE de los
+                   tomos propios y los libros de esos autores en el catálogo
+                   de la red (si se extrajo del MARC)
+    segundo salto  los «del mismo autor» de los libros ya descargados que
+                   son de una serie de la biblioteca (un tomo 5 lleva al 9
+                   aunque los propios solo lleguen al 2); con tope, para no
+                   gastar la cuota a ciegas. Cada búsqueda avanza un salto.
+
+    Se piden los que no tienen ficha y se releen las fichas guardadas antes
+    de que se leyera la serie (subcolección), y los tomos propios con más de
+    un mes, para que su lista de «otras obras del autor» recoja los nuevos.
     Devuelve (por pedir, por releer, cuántos de cada vía, hay red)."""
     lista = series_sesion(sesion)
     fichas = _base_fichas()
@@ -1315,14 +1330,24 @@ def _candidatos_series(sesion):
     red = mod_marc.isbns_de_autores(config.RUTA_MARC_IDIOMAS, {x["autor"] for x in lista if x.get("autor")})
     de_red = set().union(*red.values()) if red else set()
     del_fondo = {r["isbn"] for r in sesion.registros if r.get("isbn")}
-    candidatos = sorted(i for i in (de_dilve | de_red) - del_fondo if mod_dilve.isbn13_valido(i))
+    primer = {i for i in (de_dilve | de_red) - del_fondo if mod_dilve.isbn13_valido(i)}
+    # Segundo salto: desde lo ya descargado que pertenece a una serie propia
+    claves = {c for x in lista for c in x.get("claves") or [x["clave"]]}
+    de_series = [i for i, f in fichas.colecciones_de(sorted(primer)).items()
+                 if mod_series.clave_serie(f["coleccion"]) in claves]
+    segundo = {i for i in fichas.relacionados_de(de_series, "22") - del_fondo - primer
+               if mod_dilve.isbn13_valido(i)}
     cache = cache_fichas()
-    tienen = set(cache.idiomas_de(candidatos))
     sin = cache.sin_ficha()
-    pendientes = [i for i in candidatos if i not in tienen and i not in sin]
-    releer = sorted(fichas.antiguas(propios_series, DIAS_RELEER_SERIES))
+    candidatos = sorted(primer | segundo)
+    tienen = set(cache.idiomas_de(candidatos))
+    pendientes = [i for i in sorted(primer) if i not in tienen and i not in sin]
+    pendientes += [i for i in sorted(segundo) if i not in tienen and i not in sin][:MAX_SEGUNDO_SALTO]
+    releer = sorted(set(fichas.antiguas(propios_series, DIAS_RELEER_SERIES))
+                    | fichas.por_releer(sorted(tienen)))
     hay_red = os.path.exists(config.RUTA_MARC_IDIOMAS) and bool((mod_marc.estado(config.RUTA_MARC_IDIOMAS) or {}).get("red_libros"))
-    return pendientes, releer, {"dilve": len(de_dilve), "red": len(de_red), "series": len(lista)}, hay_red
+    return pendientes, releer, {"dilve": len(de_dilve), "red": len(de_red), "segundo": len(segundo),
+                                "series": len(lista)}, hay_red
 
 
 @app.get("/api/sesion/{token}/series/completar")
@@ -1505,7 +1530,8 @@ def _precargar_sugerencias(token):
 
 @app.get("/api/sesion/{token}/sugerencias/autores")
 def api_sugerencias_autores(token: str, recalcular: bool = False, idioma: str = None,
-                            seccion: str = None, tramo: str = None, solo_publicados: bool = True):
+                            seccion: str = None, tramo: str = None, solo_publicados: bool = True,
+                            desde: str = None, hasta: str = None):
     """Obras del mismo autor de los títulos más prestados que no están en el
     fondo. La primera vez hay que pedir fichas a DILVE, así que se calcula en
     segundo plano y se consulta el avance."""
@@ -1526,6 +1552,9 @@ def api_sugerencias_autores(token: str, recalcular: bool = False, idioma: str = 
     # antes de contar, para que los desplegables enseñen lo disponible.
     if solo_publicados:
         propuestas = [p for p in propuestas if mod_sugerencias.publicado_a_dia_de_hoy(p.get("fecha"))]
+    # Publicado desde / hasta (AAAAMMDD), también antes de contar
+    if desde or hasta:
+        propuestas = [p for p in propuestas if mod_sugerencias.en_fechas(p.get("fecha"), desde, hasta)]
     cuenta = lambda clave: dict(collections.Counter(
         (p.get(clave) or "__SIN__") for p in propuestas).most_common())
     resultado["idiomas"] = cuenta("idioma")
@@ -1589,15 +1618,20 @@ def api_sugerencias_novedades(token: str, seccion: str = None, idioma: str = Non
                               editorial: str = None, forma: str = None, texto: str = "", thema: str = None,
                               personalizadas: bool = False, ocultar_propios: bool = True,
                               solo_publicados: bool = True, proximos_3_meses: bool = True,
+                              solo_series: bool = False, solo_premiados: bool = False,
+                              desde: str = None, hasta: str = None,
                               pagina: int = 1, por_pagina: int = 48, limite: int = 300):
     sesion = obtener_sesion(token)
     estado = SUGERENCIAS.get(token, {})
     filtros = {"seccion": seccion, "idioma": idioma, "editorial": editorial, "forma": forma,
                "texto": texto, "thema": thema, "personalizadas": personalizadas,
                "ocultar_propios": ocultar_propios,
-               "solo_publicados": solo_publicados, "proximos_3_meses": proximos_3_meses}
+               "solo_publicados": solo_publicados, "proximos_3_meses": proximos_3_meses,
+               "solo_series": solo_series, "solo_premiados": solo_premiados, "desde": desde, "hasta": hasta}
     opciones = _opciones_sugerencias(sesion, estado.get("calibracion"), estado.get("perfil"), filtros)
     opciones["limite"] = limite
+    # Series de la biblioteca, por clave: las novedades que son tomos suyos se marcan
+    opciones["series_biblioteca"] = {c: x for x in series_sesion(sesion) for c in x.get("claves") or [x["clave"]]}
     opciones["pagina"], opciones["por_pagina"] = pagina, max(12, min(200, por_pagina))
     if personalizadas:
         opciones["modelo_afinidad"] = _modelo_afinidad(token, sesion)

@@ -35,6 +35,7 @@ import re
 import unicodedata
 
 from backend import materias as mod_materias
+from backend import series as mod_series
 
 RELACIONADOS_POR_TITULO = 20        # tope por título: hay autorías con cientos
 RELACIONADOS_POR_AUTOR = 60         # y por autor, sumando todos sus libros
@@ -147,10 +148,11 @@ def ficha_a_propuesta(ficha, opciones, extra=None):
         "autor": autor_de(ficha) or ficha.get("autor_principal"),
         "editorial": ficha.get("editorial") or ficha.get("sello"),
         "fecha": ficha.get("fecha_publicacion"), "coleccion": ficha.get("coleccion"),
+        "serie": ficha.get("serie"), "num_serie": ficha.get("num_coleccion") if ficha.get("serie") else None,
         "paginas": ficha.get("paginas"), "forma": ficha.get("forma"),
         "idioma": _idioma(ficha), "edad": edad,
         "seccion": seccion, "motivo_seccion": motivo, "otras_secciones": otras,
-        "cubierta": ficha.get("cubierta"), "resumen": ficha.get("resumen"),
+        "cubierta": ficha.get("cubierta"), "muestra": ficha.get("muestra"), "resumen": ficha.get("resumen"),
         "claves": _claves(ficha), "thema": _thema(ficha),
         "premios": [p["nombre"] for p in ficha.get("premios") or [] if p.get("nombre")],
     }
@@ -352,6 +354,8 @@ def perfil(fichas_nucleo, nucleo):
             pesos["editorial:" + normaliza(ficha["editorial"])] += peso * 0.4
         if ficha.get("coleccion"):
             pesos["coleccion:" + normaliza(ficha["coleccion"])] += peso
+        if ficha.get("serie"):
+            pesos["serie:" + normaliza(ficha["serie"])] += peso
     total = sum(pesos.values()) or 1
     return {k: round(v / total, 6) for k, v in pesos.items() if v > 0}
 
@@ -372,7 +376,7 @@ def parecido(ficha, perfil_biblioteca):
                 if "clave:" + palabra in perfil_biblioteca:
                     puntos += perfil_biblioteca["clave:" + palabra] * 0.5
                     rasgos.append(palabra)
-    for campo, factor in (("editorial", 0.4), ("coleccion", 1.0)):
+    for campo, factor in (("editorial", 0.4), ("coleccion", 1.0), ("serie", 1.0)):
         clave = f"{campo}:{normaliza(ficha.get(campo))}"
         if ficha.get(campo) and clave in perfil_biblioteca:
             puntos += perfil_biblioteca[clave] * factor
@@ -570,6 +574,22 @@ def limite_meses(meses, hoy=None):
     return f"{anio:04d}{mes:02d}{dia:02d}"
 
 
+def en_fechas(fecha, desde=None, hasta=None):
+    """¿Se publicó entre esas dos fechas (AAAAMMDD, las dos incluidas)? Sin
+    límites, todo vale; con alguno, los libros sin fecha quedan fuera (no se
+    puede saber). Una fecha de DILVE sin día o sin mes cuenta como el día 1."""
+    desde = "".join(c for c in str(desde or "") if c.isdigit())[:8]
+    hasta = "".join(c for c in str(hasta or "") if c.isdigit())[:8]
+    desde = desde if len(desde) == 8 else None
+    hasta = hasta if len(hasta) == 8 else None
+    if not desde and not hasta:
+        return True
+    dia = _fecha_como_dia(fecha)
+    if dia is None:
+        return False
+    return (not desde or dia >= desde) and (not hasta or dia <= hasta)
+
+
 def en_plazo(fecha, publicados=True, proximos_meses=None, hoy=None):
     """¿Entra la fecha de publicación en los plazos marcados?
 
@@ -617,12 +637,18 @@ def novedades(base, registros, opciones):
                "editorial": collections.Counter(), "forma": collections.Counter(),
                "thema": collections.Counter()}
     propuestas, sin_filtrar = [], len(fichas)
+    series_biblioteca = opciones.get("series_biblioteca") or {}
+    de_series = 0                 # cuántas novedades son tomos de series de la biblioteca
 
     solo_publicados = filtros.get("solo_publicados", True)
     proximos = 3 if filtros.get("proximos_3_meses", True) else None
     hoy = time.strftime("%Y%m%d")
     for ficha in fichas.values():
         if not en_plazo(ficha.get("fecha_publicacion"), solo_publicados, proximos, hoy):
+            continue
+        if not en_fechas(ficha.get("fecha_publicacion"), filtros.get("desde"), filtros.get("hasta")):
+            continue
+        if filtros.get("solo_premiados") and not ficha.get("premios"):
             continue
         seccion, motivo = mod_materias.clasificar(ficha, opciones.get("calibracion"), opciones.get("tablas"))
         if opciones.get("excluir_texto", True) and seccion == mod_materias.LIBRO_TEXTO:
@@ -652,6 +678,14 @@ def novedades(base, registros, opciones):
         if ficha.get("forma"):
             facetas["forma"][ficha["forma"]] += 1
 
+        # ¿Tomo de una serie que ya tiene la biblioteca? (serie o, si no, colección)
+        nombre_serie = ficha.get("serie") or ficha.get("coleccion")
+        serie = series_biblioteca.get(mod_series.clave_serie(nombre_serie)) if nombre_serie else None
+        if serie:
+            de_series += 1
+        elif filtros.get("solo_series"):
+            continue
+
         if filtros.get("seccion") and filtros["seccion"] not in secciones:
             continue
         if filtros.get("thema") and not any(c.startswith(filtros["thema"].upper()) for c in codigos):
@@ -672,13 +706,16 @@ def novedades(base, registros, opciones):
         if palabras:
             fondo = normaliza(" ".join([
                 ficha.get("titulo") or "", ficha.get("subtitulo") or "", autor_de(ficha),
-                ficha.get("coleccion") or "", ficha.get("editorial") or "", ficha.get("sello") or "",
+                ficha.get("coleccion") or "", ficha.get("serie") or "", ficha.get("editorial") or "", ficha.get("sello") or "",
                 ficha.get("resumen") or "", *_claves(ficha), _texto_thema(ficha, encabezados),
             ]))
             if not all(_coincide_palabra(p, fondo, codigos, encabezados) for p in palabras):
                 continue
 
         extra = {"seccion": seccion, "motivo_seccion": motivo, "otras_secciones": otras, "ya_en_fondo": ya_en_fondo}
+        if serie:
+            extra["serie_biblioteca"] = {"nombre": serie["nombre"], "numero": mod_series.numero_de(ficha, nombre_serie),
+                                         "ultimo": serie["ultimo"]}
         if por_modelo:
             try:
                 prevision, explicacion, relativa = mod_afinidad.prever(ficha, modelo, seccion)
@@ -696,7 +733,18 @@ def novedades(base, registros, opciones):
             extra.update({"afinidad": puntos, "parecido": rasgos})
         propuestas.append(ficha_a_propuesta(ficha, dict(opciones, seccion=seccion), extra))
 
-    if por_modelo:
+    if filtros.get("solo_series"):
+        def puesto(p):
+            sb = p["serie_biblioteca"]
+            if sb["numero"] is None:
+                return 2
+            return 0 if sb["numero"] > (sb["ultimo"] or 0) else 1
+        propuestas.sort(key=lambda p: p.get("fecha") or "", reverse=True)
+        propuestas.sort(key=lambda p: (puesto(p), p["serie_biblioteca"]["nombre"], p["serie_biblioteca"]["numero"] or 0))
+        for p in propuestas:
+            p.pop("_serie", None)
+            p.pop("_autores", None)
+    elif por_modelo:
         propuestas.sort(key=lambda p: (-p["prevision"], p.get("fecha") or ""))
         # Con una sección elegida no hay reparto que calibrar: solo topes
         propuestas = mod_afinidad.reordenar(propuestas, modelo if not filtros.get("seccion") else
@@ -714,6 +762,6 @@ def novedades(base, registros, opciones):
     pagina = min(max(1, int(opciones.get("pagina") or 1)), paginas)
     inicio = (pagina - 1) * por_pagina
     return {"propuestas": propuestas[inicio:inicio + por_pagina], "total": len(propuestas),
-            "sin_filtrar": sin_filtrar, "pagina": pagina, "paginas": paginas, "por_pagina": por_pagina,
+            "sin_filtrar": sin_filtrar, "de_series": de_series, "pagina": pagina, "paginas": paginas, "por_pagina": por_pagina,
             "limite_proximos": limite_meses(3, hoy) if proximos else None,
             "facetas": {k: dict(v.most_common(250 if k == "thema" else 40)) for k, v in facetas.items()}}

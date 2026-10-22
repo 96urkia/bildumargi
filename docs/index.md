@@ -42,7 +42,7 @@ quieres entender por qué Bildumargi calcula lo que calcula, a
 [Cómo funciona](explicacion/uso-relativo.md).
 
 !!! info "Versión"
-    Este manual corresponde a **Bildumargi 2.0**, pensada para que cada
+    Este manual corresponde a **Bildumargi 2.1**, pensada para que cada
     biblioteca la instale y la use por su cuenta. Las descargas están en la
     [página de versiones](https://github.com/96urkia/bildumargi/releases). El
     manual de la 1.1, la versión para redes, sigue en el historial del

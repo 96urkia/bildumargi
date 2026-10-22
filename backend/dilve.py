@@ -36,6 +36,10 @@ MAX_POR_LLAMADA = 128        # tope documentado de getRecordsX
 # pone en un TitleElement de nivel 01, después del nombre de la colección).
 # Las fichas con colección guardadas antes se vuelven a pedir para tenerlo.
 LECTOR_COLECCIONES = "2026-10-11T16:45:00Z"
+# Hasta esta otra, de una colección con subcolección («Éxitos» > «Café del
+# Ángel») solo se guardaba el primer nombre y la serie se perdía. Las fichas
+# con colección guardadas antes se vuelven a pedir una vez.
+LECTOR_SUBCOLECCIONES = "2026-10-21T19:45:00Z"
 VENTANA_DIAS = 7
 DIAS_SIN_FICHA = 60          # cuánto se recuerda que un ISBN no está en DILVE
 PAUSA = 6.0                  # segundos entre llamadas: lo que recomienda DILVE
@@ -466,12 +470,12 @@ def _parsear_producto(prod):
         # estuche o pack. Sirve para no recomendar estuches y lotes.
         "composicion": _valor(desc, "ProductComposition") if desc is not None else None,
         "forma_detalle": _valor(desc, "ProductFormDetail") if desc is not None else None,
-        "titulo": None, "subtitulo": None, "coleccion": None, "num_coleccion": None,
+        "titulo": None, "subtitulo": None, "coleccion": None, "serie": None, "num_coleccion": None,
         "paginas": None, "edicion": None,
         "idioma": None, "idioma_original": None,
         "editorial": None, "sello": None, "estado": None, "fecha_publicacion": None,
         "disponibilidad": None,
-        "resumen": None, "cubierta": None,
+        "resumen": None, "cubierta": None, "muestra": None,
         "edad_min": None, "edad_max": None,
         "contribuidores": [], "materias": [], "premios": [],
         "relacionados": [],      # [{codigo (lista ONIX 51), isbn}]: 22 = mismo autor, 06 = formato alternativo
@@ -490,18 +494,26 @@ def _parsear_producto(prod):
             if tipo == "01" and nivel in (None, "01"):          # título del producto
                 p["titulo"] = titulo
                 p["subtitulo"] = _valor(elem, "Subtitle")
-        # Colección o serie: el nombre va en un TitleElement (nivel 02) y el
-        # número de tomo, en otro (nivel 01, «PartNumber») o en la secuencia.
+        # Colección y serie: cada nombre va en un TitleElement con su nivel
+        # (lista ONIX 149): 02 = colección («Éxitos»), 03 = subcolección, que
+        # en ficción suele ser la serie («Café del Ángel»). El número de tomo
+        # va en otro (nivel 01, «PartNumber») o en la secuencia.
         for col in _todos(desc, "Collection"):
-            if p["coleccion"]:
+            if p["coleccion"] or p["serie"]:
                 break
-            nombre = numero = None
+            nombres, numero = {}, None
             for elem in _todos(col, "TitleElement"):
-                nombre = nombre or _valor(elem, "TitleText") or _valor(elem, "TitleWithoutPrefix")
+                nivel = _valor(elem, "TitleElementLevel")
+                nombre = _valor(elem, "TitleText") or _valor(elem, "TitleWithoutPrefix")
+                if nombre and nivel != "01":
+                    nombres.setdefault(nivel, nombre)
                 numero = numero or _valor(elem, "PartNumber")
             numero = numero or _valor(col, "CollectionSequence/CollectionSequenceNumber")
-            if nombre:
-                p["coleccion"], p["num_coleccion"] = nombre, numero
+            p["serie"] = nombres.get("03")
+            p["coleccion"] = nombres.get("02") or next(
+                (n for nivel, n in nombres.items() if nivel != "03"), None)
+            if p["coleccion"] or p["serie"]:
+                p["num_coleccion"] = numero
         for ext in _todos(desc, "Extent"):
             if _valor(ext, "ExtentType") in ("00", "11") and not p["paginas"]:
                 valor = _valor(ext, "ExtentValue")
@@ -586,11 +598,14 @@ def _parsear_producto(prod):
                     p["resumen"] = re.sub(r"<[^>]+>", " ", texto)
                     p["resumen"] = re.sub(r"\s+", " ", p["resumen"]).strip()[:4000]
         for sr in _todos(colat, "SupportingResource"):
-            if _valor(sr, "ResourceContentType") != "01":        # 01 = cubierta
+            tipo = _valor(sr, "ResourceContentType")             # lista ONIX 158
+            if tipo not in ("01", "15"):                         # 01 = cubierta, 15 = muestra
                 continue
             enlace = _valor(sr, "ResourceVersion/ResourceLink") or _valor(sr, "ResourceLink")
-            if enlace and not p["cubierta"]:
+            if tipo == "01" and enlace and not p["cubierta"]:
                 p["cubierta"] = enlace
+            elif tipo == "15" and enlace and enlace.startswith(("http://", "https://")) and not p["muestra"]:
+                p["muestra"] = enlace
         for premio in _todos(colat, "Prize"):
             nombre = _valor(premio, "PrizeName")
             if nombre:
@@ -614,7 +629,7 @@ CREATE TABLE IF NOT EXISTS novedades (
     referencia  TEXT,
     titulo      TEXT, subtitulo TEXT,
     editorial   TEXT, sello TEXT,
-    coleccion   TEXT, num_coleccion TEXT,
+    coleccion   TEXT, serie TEXT, num_coleccion TEXT,
     idioma      TEXT, idioma_original TEXT,
     forma       TEXT, forma_detalle TEXT,
     paginas     INTEGER, edicion TEXT,
@@ -622,7 +637,7 @@ CREATE TABLE IF NOT EXISTS novedades (
     composicion TEXT, publico TEXT, idioma_declarado INTEGER,
     disponibilidad TEXT,
     edad_min    INTEGER, edad_max INTEGER,
-    resumen     TEXT, cubierta TEXT,
+    resumen     TEXT, cubierta TEXT, muestra TEXT,
     alta_dilve  TEXT,        -- cuándo la vio Bildumargi por primera vez
     actualizado TEXT
 );
@@ -692,6 +707,13 @@ class BaseNovedades:
             self.conn = sqlite3.connect(ruta, check_same_thread=False)
             self.conn.row_factory = sqlite3.Row
             self.conn.executescript(ESQUEMA)
+            # Bases de antes de leer la subcolección (serie): se añade la columna
+            columnas = {f[1] for f in self.conn.execute("PRAGMA table_info(novedades)")}
+            if "serie" not in columnas:
+                self.conn.execute("ALTER TABLE novedades ADD COLUMN serie TEXT")
+            if "muestra" not in columnas:                       # enlace a la muestra de lectura
+                self.conn.execute("ALTER TABLE novedades ADD COLUMN muestra TEXT")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_nov_serie ON novedades(serie)")
             self.conn.commit()
         except (OSError, sqlite3.Error) as exc:
             self.conn = None
@@ -726,14 +748,15 @@ class BaseNovedades:
                     nuevos += 1
                 self.conn.execute("""
                     INSERT INTO novedades (isbn, referencia, titulo, subtitulo, editorial, sello,
-                        coleccion, num_coleccion, idioma, idioma_original, forma, forma_detalle,
+                        coleccion, serie, num_coleccion, idioma, idioma_original, forma, forma_detalle,
                         paginas, edicion, estado, fecha_publicacion, composicion, publico,
                         idioma_declarado, disponibilidad,
-                        edad_min, edad_max, resumen, cubierta, alta_dilve, actualizado)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        edad_min, edad_max, resumen, cubierta, muestra, alta_dilve, actualizado)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     ON CONFLICT(isbn) DO UPDATE SET
                         referencia=excluded.referencia, titulo=excluded.titulo, subtitulo=excluded.subtitulo,
                         editorial=excluded.editorial, sello=excluded.sello, coleccion=excluded.coleccion,
+                        serie=excluded.serie,
                         num_coleccion=excluded.num_coleccion, idioma=excluded.idioma,
                         idioma_original=excluded.idioma_original, forma=excluded.forma,
                         forma_detalle=excluded.forma_detalle, paginas=excluded.paginas,
@@ -742,14 +765,14 @@ class BaseNovedades:
                         composicion=excluded.composicion, publico=excluded.publico,
                         idioma_declarado=excluded.idioma_declarado, disponibilidad=excluded.disponibilidad,
                         edad_min=excluded.edad_min, edad_max=excluded.edad_max,
-                        resumen=excluded.resumen, cubierta=excluded.cubierta,
+                        resumen=excluded.resumen, cubierta=excluded.cubierta, muestra=excluded.muestra,
                         actualizado=excluded.actualizado
                 """, (p["isbn"], p["referencia"], p["titulo"], p["subtitulo"], p["editorial"], p["sello"],
-                      p["coleccion"], p["num_coleccion"], p["idioma"], p["idioma_original"], p["forma"],
+                      p["coleccion"], p.get("serie"), p["num_coleccion"], p["idioma"], p["idioma_original"], p["forma"],
                       p["forma_detalle"], p["paginas"], p["edicion"], p["estado"], p["fecha_publicacion"],
                       p.get("composicion"), ",".join(p.get("publico") or []),
                       1 if p.get("idioma_declarado") else 0, p["disponibilidad"], p["edad_min"], p["edad_max"],
-                      p["resumen"], p["cubierta"], ahora, ahora))
+                      p["resumen"], p["cubierta"], p.get("muestra"), ahora, ahora))
                 for tabla in ("contribuidores", "materias", "premios", "relacionados"):
                     self.conn.execute(f"DELETE FROM {tabla} WHERE isbn = ?", (p["isbn"],))
                 for c in p["contribuidores"]:
@@ -771,24 +794,28 @@ class BaseNovedades:
 
     # -- lectura -----------------------------------------------------------
     def por_releer(self, isbns):
-        """Fichas con colección guardadas antes de que se leyera el número de
-        tomo, y sin él: se vuelven a pedir una vez."""
+        """Fichas con colección que se leyeron mal y se vuelven a pedir una
+        vez: las guardadas antes de que se leyera el número de tomo, y sin él,
+        y las guardadas antes de que se leyera la subcolección (serie)."""
         if not self.conn:
             return set()
-        isbns = [i for i in isbns if i]
+        descartados = self.sin_ficha()          # releídas hace poco sin respuesta de DILVE
+        isbns = [i for i in isbns if i and i not in descartados]
         salida = set()
         for inicio in range(0, len(isbns), 900):
             lote = isbns[inicio: inicio + 900]
             marcas = ",".join("?" * len(lote))
             salida.update(f[0] for f in self.conn.execute(
                 f"""SELECT isbn FROM novedades WHERE isbn IN ({marcas}) AND coleccion IS NOT NULL
-                    AND (num_coleccion IS NULL OR num_coleccion = '')
-                    AND (actualizado IS NULL OR actualizado < ?)""", lote + [LECTOR_COLECCIONES]))
+                    AND (actualizado IS NULL OR actualizado < ?
+                         OR ((num_coleccion IS NULL OR num_coleccion = '') AND actualizado < ?))""",
+                lote + [LECTOR_SUBCOLECCIONES, LECTOR_COLECCIONES]))
         return salida
 
     def colecciones(self, nombres):
         """Lo que se sabe de unas colecciones: {colección: [{isbn, titulo,
-        num_coleccion, fecha_publicacion}…]} de todas las fichas guardadas."""
+        num_coleccion, fecha_publicacion}…]} de todas las fichas guardadas.
+        Si la ficha tiene serie (subcolección), cuenta la serie."""
         if not self.conn or not nombres:
             return {}
         nombres = list(nombres)
@@ -797,13 +824,22 @@ class BaseNovedades:
             lote = nombres[inicio: inicio + 900]
             marcas = ",".join("?" * len(lote))
             for f in self.conn.execute(
-                    f"""SELECT isbn, titulo, coleccion, num_coleccion, fecha_publicacion, editorial, cubierta
-                        FROM novedades WHERE coleccion IN ({marcas})""", lote):
+                    f"""SELECT isbn, titulo, COALESCE(serie, coleccion) AS coleccion, num_coleccion,
+                            fecha_publicacion, editorial, cubierta
+                        FROM novedades WHERE COALESCE(serie, coleccion) IN ({marcas})""", lote):
                 salida.setdefault(f["coleccion"], []).append(dict(f))
         return salida
 
+    def nombres_de_colecciones(self):
+        """Todos los nombres de serie (o, si no la hay, de colección) guardados."""
+        if not self.conn:
+            return []
+        return [f[0] for f in self.conn.execute(
+            "SELECT DISTINCT COALESCE(serie, coleccion) FROM novedades WHERE COALESCE(serie, coleccion) IS NOT NULL")]
+
     def colecciones_de(self, isbns):
-        """{isbn: (colección, número)} de esas fichas."""
+        """{isbn: (colección, número)} de esas fichas; la serie (subcolección),
+        si la tienen, en lugar de la colección de editorial."""
         if not self.conn:
             return {}
         isbns = [i for i in isbns if i]
@@ -812,8 +848,9 @@ class BaseNovedades:
             lote = isbns[inicio: inicio + 900]
             marcas = ",".join("?" * len(lote))
             for f in self.conn.execute(
-                    f"""SELECT isbn, coleccion, num_coleccion, titulo, fecha_publicacion, cubierta FROM novedades
-                        WHERE isbn IN ({marcas}) AND coleccion IS NOT NULL""", lote):
+                    f"""SELECT isbn, COALESCE(serie, coleccion) AS coleccion, num_coleccion, titulo,
+                            fecha_publicacion, cubierta FROM novedades
+                        WHERE isbn IN ({marcas}) AND COALESCE(serie, coleccion) IS NOT NULL""", lote):
                 salida[f["isbn"]] = dict(f)
         return salida
 
@@ -935,12 +972,19 @@ class BaseNovedades:
 
     def releer(self, isbns, cliente):
         """Vuelve a pedir estas fichas aunque ya estén guardadas (para leer
-        lo que antes se perdía). Devuelve cuántas se han recibido."""
+        lo que antes se perdía). Devuelve cuántas se han recibido.
+
+        Las que DILVE no devuelve (retiradas o corregidas por la editorial) se
+        anotan como sin ficha, igual que en fichas(): si no, seguirían por
+        releer y se volverían a pedir en cada descarga."""
         isbns = [i for i in isbns if i]
         if not isbns or cliente is None:
             return 0
         nuevas = cliente.fichas(isbns)
         self.guardar(nuevas)
+        if cliente.interrupcion is None:        # con la cuota agotada o un bloqueo, no se sabe
+            recibidos = {p["isbn"] for p in nuevas}
+            self.anotar_sin_ficha([i for i in isbns if i not in recibidos])
         return len(nuevas)
 
     def estadisticas(self):

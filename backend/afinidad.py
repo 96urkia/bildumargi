@@ -130,7 +130,7 @@ def autores_dilve(ficha):
 
 
 def _serie(ficha):
-    coleccion = normaliza(ficha.get("coleccion"))
+    coleccion = normaliza(ficha.get("serie") or ficha.get("coleccion"))
     coleccion = re.sub(r"\b(n|no|num|vol|volumen|tomo|libro|book|\d+)\b", " ", coleccion)
     coleccion = " ".join(coleccion.split())
     return coleccion or None
@@ -156,9 +156,12 @@ def rasgos_ficha(ficha):
     for m in materias:
         if m.get("esquema") == "20" and m.get("texto"):
             claves += [p for p in normaliza(m["texto"]).split() if len(p) > 3 and p not in PALABRAS_VACIAS]
-    serie = _serie(ficha) if ficha.get("num_coleccion") else None
+    # La subcolección es la serie aunque no traiga número; la colección,
+    # solo si numera sus tomos. Una colección de editorial con serie debajo
+    # («Éxitos» > «Café del Ángel») cuenta además como sello.
+    serie = _serie(ficha) if ficha.get("serie") or ficha.get("num_coleccion") else None
     sellos = []
-    if ficha.get("coleccion") and not serie:
+    if ficha.get("coleccion") and (ficha.get("serie") or not serie):
         sellos.append("c:" + normaliza(ficha["coleccion"]))
     if ficha.get("sello") or ficha.get("editorial"):
         sellos.append("e:" + normaliza(ficha.get("sello") or ficha.get("editorial")))
@@ -399,7 +402,7 @@ def _rotulo(clave, ficha):
                 return c.get("invertido") or c.get("nombre")
         return valor.split("|")[0].title()
     if tipo == "s":
-        return ficha.get("coleccion") or valor
+        return ficha.get("serie") or ficha.get("coleccion") or valor
     if tipo == "e":
         return ficha.get("sello") or ficha.get("editorial") or valor
     if tipo == "c":

@@ -12,7 +12,7 @@
 ;
 ; Lo construye packaging\windows\construir.ps1.
 
-#define Version "2.0"
+#define Version "2.1"
 
 [Setup]
 AppId={{6E3B5E0A-6F4B-4C1B-9B1E-2B6A1C9D0F21}

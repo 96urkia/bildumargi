@@ -55,7 +55,7 @@ grep deb13 SHA256SUMS
 ```
 
 !!! info "Por qué el nombre lleva un punto"
-    El paquete se llama, por ejemplo, `bildumargi_2.0-1.deb13_amd64.deb`.
+    El paquete se llama, por ejemplo, `bildumargi_2.1-1.deb13_amd64.deb`.
     GitHub cambia la `~` del nombre original por un punto al publicarlo. Por
     eso los comandos usan comodines (`bildumargi*deb13*.deb`), que valen para
     cualquier versión.
@@ -88,7 +88,7 @@ bildumargi version
 sudo systemctl status bildumargi
 ```
 
-Debe responder **Bildumargi 2.0** y mostrar **active (running)** en verde.
+Debe responder **Bildumargi 2.1** y mostrar **active (running)** en verde.
 Pulsa ++q++ para salir.
 
 ![Estado del servicio de Bildumargi: active (running)](../img/srv-estado-servicio.png)

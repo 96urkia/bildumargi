@@ -1,11 +1,68 @@
 Bildumargi
-Versión: 2.0
+Versión: 2.1
 Licencia: AGPLv3
 
 Versión para bibliotecas individuales: se instala en Windows con un
 instalador (acceso directo y ventana propia), con iniciar.bat / iniciar.sh, o
 en un servidor Linux con el paquete .deb. Manual:
 https://96urkia.github.io/bildumargi/
+
+Cambios de la versión 2.1
+--------------------------
+La 2.1 se centra en las series y en afinar las sugerencias de compra.
+
+Series
+- DILVE: se lee la subcolección (la serie, «Café del Ángel») aparte de la
+  colección de editorial («Éxitos»). Antes se tomaba el primer nombre y la
+  serie se perdía. Las fichas guardadas con la versión anterior se vuelven a
+  pedir una vez (Configuración → Fichas de todo el catálogo).
+- Las variantes de un mismo nombre cuentan como una sola serie: sin lo que
+  va entre corchetes («Harry Potter [edición…]»), sin puntuación, y nombres
+  que difieren en una o dos letras si son del mismo autor y no repiten
+  números de tomo («Pequeña & Grande» y «Pequeño & Grande»). Los nombres con
+  la ruta de catálogo de la editorial («Castellano - A PARTIR DE 12 AÑOS -
+  … - Mis padres y yo») se muestran por su último tramo.
+- Panel de cifras: series, series prestadas, año medio de publicación y
+  series incompletas, con los ejemplares por adquirir para completarlas.
+- Filtros de público, sección y estado (completas / sin completar). Un solo
+  aviso «Faltan N» que suma huecos y tomos posteriores.
+- Páginas de cuatro filas de tarjetas, con paginador arriba y abajo.
+- Botón «×» en cada tarjeta para ignorar una colección que no es serie; se
+  puede recuperar en Configuración → Series ocultas.
+- «Completar las series»: vuelve a pedir las fichas de candidatos guardadas
+  sin la serie y da un segundo salto, acotado, desde los tomos que ya
+  pertenecen a una serie de la biblioteca.
+- Las novedades descargadas se cotejan con las series de la biblioteca: sus
+  tomos aparecen como huecos o tomos posteriores y se conservan al salir de
+  la ventana de meses.
+- Cálculo de las series unas diez veces más rápido, con el mismo resultado.
+
+Sugerencias de compra
+- Novedades: etiqueta «Tu serie: … · n.º …» en los tomos de series de la
+  biblioteca, casilla «Solo tomos de tus series» (primero los tomos que
+  siguen al último propio) y casilla «Solo premiados».
+- Filtros «Publicado desde» y «Publicado hasta» (DD/MM/AAAA, escribiendo o
+  con calendario) en Autores más prestados y en Novedades. «Hasta» empieza
+  en el día de hoy, para que no salgan preventas lejanas. Sustituyen a las
+  casillas «Solo publicados a día de hoy» y «Disponibles en los próximos 3
+  meses».
+- Fuera la fila de cifras del fondo, que ya está en Diagnóstico.
+- La serie cuenta en el orden por afinidad; la colección de editorial que
+  la contiene, como sello.
+
+Ficha del libro
+- Serie y número de tomo.
+- Botón «Leer muestra» cuando la editorial da en DILVE un enlace a las
+  primeras páginas. Las fichas guardadas antes no lo tienen hasta que se
+  vuelven a pedir.
+
+Interfaz
+- El menú lateral queda en el mismo sitio en todas las pestañas (antes se
+  desplazaba, sobre todo en Seguimiento y en Series).
+
+Correcciones
+- Las fichas que DILVE no devuelve al volver a pedirlas dejan de contar
+  como pendientes (antes el aviso de «resultado parcial» no desaparecía).
 
 Cambios de la versión 2.0
 --------------------------
@@ -355,8 +412,8 @@ Versión 2026.09.18
 
 Cómo comprobar que estás ejecutando ESTA versión
 ------------------------------------------------
-Al arrancar, la ventana de la terminal muestra "Bildumargi 1.1".
+Al arrancar, la ventana de la terminal muestra "Bildumargi 2.1".
 En la aplicación, el menú lateral muestra:
-   Diagnóstico · Secciones · Seguimiento                                   (sin base de datos enlazada)
-   Diagnóstico · Secciones · Sugerencias de compra · Red · Seguimiento     (con base)
+   Diagnóstico · Secciones · Series · Seguimiento                          (sin cuenta de DILVE)
+   Diagnóstico · Secciones · Series · Sugerencias de compra · Seguimiento  (con cuenta de DILVE)
 El pie de página debe decir "AGPLv3 · Código fuente".

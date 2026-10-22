@@ -21,8 +21,11 @@ Un tomo posterior que DILVE no haya dado nunca no se puede ver.
 """
 
 import collections
+import functools
 import re
 import unicodedata
+
+from backend import clasificacion
 
 MAX_NUMERO_SERIE = 60      # por encima, numeración de colección de editorial
 
@@ -30,6 +33,74 @@ MAX_NUMERO_SERIE = 60      # por encima, numeración de colección de editorial
 def _clave(nombre):
     texto = unicodedata.normalize("NFKD", str(nombre or "")).encode("ascii", "ignore").decode()
     return " ".join(texto.lower().split())
+
+
+@functools.lru_cache(maxsize=65536)     # los mismos nombres se repiten miles de veces
+def clave_serie(nombre):
+    """Clave para agrupar nombres de serie: sin lo que va entre corchetes
+    («Harry Potter [edición con la portada ilustrada…]») ni puntuación
+    («Ilargia - Narrativa» = «Ilargia Narrativa»)."""
+    texto = re.sub(r"\[[^\]]*\]", " ", _clave(nombre))
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", texto).split())
+
+
+def nombre_visible(nombre):
+    """Bruño pone su árbol de catálogo en el nombre («Castellano - A PARTIR
+    DE 12 AÑOS - NARRATIVA - Mis padres y yo»): se enseña solo el último tramo."""
+    tramos = [t.strip() for t in str(nombre or "").split(" - ")]
+    return tramos[-1] if len(tramos) >= 3 and tramos[-1] else nombre
+
+
+def _distancia(a, b, tope=2):
+    """Distancia de edición entre dos cadenas, cortada en tope + 1."""
+    if abs(len(a) - len(b)) > tope:
+        return tope + 1
+    fila = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        previa, fila[0] = fila[0], i
+        for j, cb in enumerate(b, 1):
+            previa, fila[j] = fila[j], min(fila[j] + 1, fila[j - 1] + 1, previa + (ca != cb))
+    return fila[-1]
+
+
+MIN_LETRAS_PARECIDAS = 8   # nombres más cortos no se unen por parecido
+
+
+def _unir_parecidas(grupos):
+    """Une grupos cuyos nombres difieren en una o dos letras («Pequeña &
+    Grande» y «Pequeño & Grande»), solo si son del mismo autor y ningún
+    número de tomo propio se repite entre ellos."""
+    def autor(g):
+        cuenta = collections.Counter(autor_normalizado(r.get("autor")) for r, _ in g["ejemplares"] if r.get("autor"))
+        return cuenta.most_common(1)[0][0] if cuenta else None
+
+    def numeros(g):
+        return {numero_de(f, f.get("coleccion")) for _, f in g["ejemplares"]} - {None}
+
+    # Solo se comparan grupos del mismo autor (es condición para unirlos):
+    # comparar todos con todos eran cientos de miles de distancias
+    por_autor = collections.defaultdict(list)
+    for clave, g in grupos.items():
+        a = autor(g) if len(clave) >= MIN_LETRAS_PARECIDAS else None
+        if a:
+            por_autor[a].append(clave)
+    for claves in por_autor.values():
+        if len(claves) < 2:
+            continue
+        claves.sort(key=lambda c: -len(grupos[c]["ejemplares"]))
+        for i, mayor in enumerate(claves):
+            if mayor not in grupos:
+                continue
+            for menor in claves[i + 1:]:
+                if menor not in grupos:
+                    continue
+                a, b = grupos[mayor], grupos[menor]
+                if _distancia(mayor, menor) <= 2 and not (numeros(a) & numeros(b)):
+                    a["nombres"].update(b["nombres"])
+                    a["ejemplares"].extend(b["ejemplares"])
+                    a["claves"] |= b["claves"]
+                    del grupos[menor]
+    return grupos
 
 
 def numero_de(ficha, coleccion):
@@ -115,7 +186,7 @@ def detectar(registros, fichas_propias, conocidas, ocultas=()):
                     colecciones (propias, de otras búsquedas y novedades)
     ocultas         nombres de colección que la biblioteca ha descartado
     """
-    ocultas = {_clave(x) for x in ocultas or ()}
+    ocultas = {clave_serie(x) for x in ocultas or ()}
     # Títulos de todo el fondo, también de lo que no tiene ficha de DILVE
     titulos_fondo = {}
     for r in registros:
@@ -123,22 +194,39 @@ def detectar(registros, fichas_propias, conocidas, ocultas=()):
         if clave_titulo:
             titulos_fondo.setdefault(clave_titulo, r)
     # Ejemplares propios por colección y número
-    grupos = collections.defaultdict(lambda: {"nombres": collections.Counter(), "ejemplares": []})
+    grupos = {}
     for r in registros:
         ficha = fichas_propias.get(r.get("isbn") or "")
         if not ficha or not ficha.get("coleccion"):
             continue
-        g = grupos[_clave(ficha["coleccion"])]
+        clave = clave_serie(ficha["coleccion"])
+        g = grupos.setdefault(clave, {"nombres": collections.Counter(), "ejemplares": [], "claves": {clave}})
         g["nombres"][ficha["coleccion"]] += 1
         g["ejemplares"].append((r, ficha))
+    _unir_parecidas(grupos)
+    # Para «posiblemente de la serie»: firma (autor, signatura) y comienzo del
+    # título de cada ejemplar sin ficha de colección, calculados una sola vez
+    # (antes se recalculaban para cada serie con todo el fondo)
+    inicio = lambda texto: " ".join(_clave(texto).split()[:2])
+    sin_coleccion_por_firma = collections.defaultdict(list)
+    for r in registros:
+        if r.get("isbn") and fichas_propias.get(r["isbn"], {}).get("coleccion"):
+            continue
+        sin_coleccion_por_firma[(_clave(r.get("autor")), _clave(r.get("signatura_real")))].append(
+            (r, inicio(r.get("titulo"))))
+    # Lo conocido de cada serie, por clave (se calcula una vez, no por grupo)
+    conocidas_por_clave = collections.defaultdict(list)
+    for nombre_conocido, lista in conocidas.items():
+        conocidas_por_clave[clave_serie(nombre_conocido)].append((nombre_conocido, lista))
 
     series = []
     for clave, g in grupos.items():
-        nombre = g["nombres"].most_common(1)[0][0]
+        # El nombre sin corchetes de edición y, entre esos, el más repetido
+        nombre = max(g["nombres"], key=lambda n: ("[" not in n, g["nombres"][n]))
         tomos = collections.defaultdict(list)          # número -> ejemplares propios
         sin_numero = []
         for r, ficha in g["ejemplares"]:
-            n = numero_de(ficha, nombre)
+            n = numero_de(ficha, ficha.get("coleccion") or nombre)
             (tomos[n].append((r, ficha)) if n is not None else sin_numero.append((r, ficha)))
         numeros = sorted(tomos)
         # Serie: al menos dos tomos propios numerados, con numeración de serie
@@ -146,17 +234,16 @@ def detectar(registros, fichas_propias, conocidas, ocultas=()):
             continue
         if not es_serie(nombre, g["ejemplares"]):
             continue
-        if clave in ocultas:
+        visible = nombre_visible(nombre)
+        if g["claves"] & ocultas or clave_serie(visible) in ocultas:
             continue
         ultimo = numeros[-1]
 
         # Lo que DILVE sabe de esta colección (otros tomos, con su título)
         otros = {}
-        for nombre_conocido, lista in conocidas.items():
-            if _clave(nombre_conocido) != clave:
-                continue
+        for nombre_conocido, lista in (par for c in g["claves"] for par in conocidas_por_clave.get(c, ())):
             for f in lista:
-                n = numero_de(f, nombre)
+                n = numero_de(f, nombre_conocido)
                 if n is not None and n not in tomos and n <= MAX_NUMERO_SERIE:
                     previa = otros.get(n)
                     # Con el mismo número puede haber reediciones o una subserie
@@ -221,14 +308,10 @@ def detectar(registros, fichas_propias, conocidas, ocultas=()):
                                      for r, _ in g["ejemplares"] if r.get("autor"))
         firmas = {f for f, n in firmas.items() if n >= 2}
         # …y cuyo título empieza como los de la serie («El misterio del…»)
-        inicio = lambda texto: " ".join(_clave(texto).split()[:2])
         comienzos = collections.Counter(inicio(r.get("titulo")) for r, _ in g["ejemplares"])
         comienzos = {c for c, n in comienzos.items() if c and n >= 2}
-        for r in registros:
-            if id(r) in en_serie or (r.get("isbn") and fichas_propias.get(r["isbn"], {}).get("coleccion")):
-                continue
-            if ((_clave(r.get("autor")), _clave(r.get("signatura_real"))) in firmas
-                    and inicio(r.get("titulo")) in comienzos):
+        for r, comienzo in (par for firma in firmas for par in sin_coleccion_por_firma.get(firma, ())):
+            if id(r) not in en_serie and comienzo in comienzos:
                 filas.append({"numero": None, "estado": "posible", "titulo": r.get("titulo"), "anio": _anio(r, None),
                               "isbn": r.get("isbn"), "ejemplares": 1, "prestados": 1 if r.get("prestado") else 0,
                               "prestamos": r.get("n_prestamos") or None, "signatura": r.get("signatura_real")})
@@ -246,8 +329,14 @@ def detectar(registros, fichas_propias, conocidas, ocultas=()):
         anios = [x["anio"] for x in propias if x.get("anio")]
         ejemplares = sum(x["ejemplares"] for x in propias)
         autores = collections.Counter(autor_normalizado(r.get("autor")) for r, _ in g["ejemplares"] if r.get("autor"))
+        # Secciones de la biblioteca donde están sus tomos (la que más primero)
+        # y público, por mayoría de ejemplares: para filtrar las series
+        secciones = collections.Counter(r.get("categoria") for r, _ in g["ejemplares"] if r.get("categoria"))
+        infantiles = sum(1 for r, _ in g["ejemplares"] if clasificacion.es_categoria_infantil(r.get("categoria") or ""))
         series.append({
-            "nombre": nombre, "clave": clave, "portada": portada,
+            "nombre": visible, "clave": clave, "claves": sorted(g["claves"]), "portada": portada,
+            "secciones": [x for x, _ in secciones.most_common()],
+            "publico": "infantil" if infantiles * 2 > len(g["ejemplares"]) else "adultos",
             "autor": autores.most_common(1)[0][0] if autores else None,
             "tomos": len(numeros) + len(sin_numero) + sum(1 for x in filas if x.get("sin_ficha")),
             "ultimo": ultimo,

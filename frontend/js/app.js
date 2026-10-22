@@ -740,9 +740,10 @@ async function mostrarVista(clave) {
   estado.vista = clave;
   pintarNavegador();
   soltarMedidores();
-  // Secciones es un panel de una sola pantalla: el documento deja de crecer
-  // y la vista se ajusta al alto de la ventana (ver .modo-panel en el CSS).
-  document.body.classList.toggle("modo-panel", ["diagnostico", "secciones", "compras", "seguimiento"].includes(clave));
+  // Todas las pestañas son paneles de una sola pantalla: el documento deja de
+  // crecer y la vista se ajusta al alto de la ventana (ver .modo-panel en el
+  // CSS). Así cabecera, márgenes y menú quedan en el mismo sitio en todas.
+  document.body.classList.toggle("modo-panel", ["diagnostico", "secciones", "series", "compras", "seguimiento"].includes(clave));
   const vista = $("#vista");
   cargando(vista);
   try {
@@ -1399,29 +1400,11 @@ function pintarFiltrosSecciones(barra, c, recargar) {
 
   // Año de edición: un intervalo, con cualquiera de los dos límites opcional
   // («de» sin «a» es «desde ese año en adelante», y al revés).
-  const rangoAnios = crear("div", "campo campo-rango-anios");
-  rangoAnios.appendChild(crear("span", "rotulo-campo", t("anio_edicion")));
-  const cajaAnios = crear("div", "rango-anios");
-  const desde = crear("input");
-  desde.type = "number";
-  desde.placeholder = t("anio_desde");
-  desde.setAttribute("aria-label", t("anio_desde"));
-  desde.value = c.anio_desde ?? "";
-  const hasta = crear("input");
-  hasta.type = "number";
-  hasta.placeholder = t("anio_hasta");
-  hasta.setAttribute("aria-label", t("anio_hasta"));
-  hasta.value = c.anio_hasta ?? "";
-  const confirmarRango = () => {
-    c.anio_desde = desde.value ? Number(desde.value) : null;
-    c.anio_hasta = hasta.value ? Number(hasta.value) : null;
+  barra.appendChild(campoRangoAnios(t("anio_edicion"), c.anio_desde, c.anio_hasta, (de, a) => {
+    c.anio_desde = de;
+    c.anio_hasta = a;
     recargar();
-  };
-  desde.addEventListener("change", confirmarRango);
-  hasta.addEventListener("change", confirmarRango);
-  cajaAnios.append(desde, crear("span", "separador-rango", "–"), hasta);
-  rangoAnios.appendChild(cajaAnios);
-  barra.appendChild(rangoAnios);
+  }));
 
   // Las migas van en la misma banda que los filtros: si ocuparan una fila
   // propia, el panel entero saltaría hacia abajo al pulsar un bloque.
@@ -1720,7 +1703,11 @@ function miga(texto, alQuitar) {
 async function vistaSeries(vista) {
   soltarMedidores();
   const d = await API.series(estado.sesion);
-  const c = estado.controles.series || (estado.controles.series = { texto: "", solo_faltan: false });
+  const c = estado.controles.series || (estado.controles.series = { texto: "", estado: "todas" });
+  c.publico = c.publico || "todo";
+  c.estado = c.estado || "todas";
+  c.pagina = c.pagina || 1;
+  c.seccion = c.seccion || "__TODAS__";
   vista.innerHTML = "";
   const raiz = crear("div", "vista-series");
   vista.appendChild(raiz);
@@ -1737,7 +1724,19 @@ async function vistaSeries(vista) {
 
   const barra = crear("div", "barra-superior barra-series");
   barra.appendChild(entradaTexto(t("termino"), c.texto, t("series_buscar"), (v) => { c.texto = v.trim(); pintarLista(); }, "busqueda"));
-  barra.appendChild(casilla(t("series_solo_faltan"), c.solo_faltan, (v) => { c.solo_faltan = v; pintarLista(); }));
+  // Filtros por público y por sección de la biblioteca (la de sus tomos)
+  barra.appendChild(selector(t("publico"), [
+    { valor: "todo", etiqueta: t("todo_fondo") },
+    { valor: "adultos", etiqueta: t("solo_adultos") },
+    { valor: "infantil", etiqueta: t("solo_infantil") },
+  ], c.publico, (v) => { c.publico = v; pintarSecciones(); pintarLista(); }));
+  const hueco = crear("div", "hueco-seccion-series");
+  barra.appendChild(hueco);
+  barra.appendChild(selector(t("series_estado"), [
+    { valor: "todas", etiqueta: t("todas") },
+    { valor: "sin_completar", etiqueta: t("series_sin_completar") },
+    { valor: "completas", etiqueta: t("series_completas") },
+  ], c.estado, (v) => { c.estado = v; pintarLista(); }));
   if (d.credenciales && !MODO_DEMO) {
     const completar = crear("button", "boton secundario", t("ser_completar"));
     completar.type = "button";
@@ -1748,31 +1747,96 @@ async function vistaSeries(vista) {
   const resumen = crear("span", "resumen-series");
   barra.appendChild(resumen);
   raiz.appendChild(barra);
+  // Cifras de las series que se ven (con los filtros puestos)
+  const cifras = crear("div", "fila-indicadores fila-seguimiento fila-series");
+  raiz.appendChild(cifras);
   raiz.appendChild(crear("p", "ayuda-config", t("series_intro")));
+  const mensajes = crear("div");
+  // Paginador arriba y abajo, como en Novedades
+  const arriba = crear("div", "cabecera-novedades");
   const rejilla = crear("div", "rejilla-series");
-  raiz.appendChild(rejilla);
-  if (d.ocultas && d.ocultas.length) {
-    const ocultas = crear("p", "nota-pie");
+  const abajo = crear("div", "pie-novedades");
+  const ocultas = crear("p", "nota-pie");
+  raiz.append(mensajes, arriba, rejilla, abajo, ocultas);
+
+  function pintarOcultas() {
+    ocultas.innerHTML = "";
+    if (!(d.ocultas || []).length) return;
     ocultas.append(t("series_ocultas", { n: miles(d.ocultas.length) }), " ");
     const ver = crear("button", "enlace-discreto", t("series_ver_ocultas"));
     ver.type = "button";
     ver.addEventListener("click", () => abrirConfiguracion("series"));
     ocultas.appendChild(ver);
-    raiz.appendChild(ocultas);
+  }
+
+  // Ignorar una serie desde su tarjeta: se guarda en «Series ocultas»
+  // (Configuración) y desaparece de la lista sin recalcular todo
+  async function ignorar(x) {
+    mensajes.innerHTML = "";
+    try {
+      await guardarSeriesOcultas([...(conf().series_ocultas || []), x.nombre]);
+    } catch (e) {
+      mensajes.appendChild(aviso("error", e.message));
+      return;
+    }
+    d.series = d.series.filter((s) => s !== x);
+    d.ocultas = [...(d.ocultas || []), x.nombre];
+    pintarOcultas();
+    pintarSecciones();
+    pintarLista();
+  }
+
+  const delPublico = (x) => c.publico === "todo" || x.publico === c.publico;
+  const faltanDe = (x) => (x.huecos || 0) + (x.posteriores || 0);
+
+  // Secciones con series del público elegido, con cuántas tiene cada una
+  function pintarSecciones() {
+    const cuenta = new Map();
+    for (const x of d.series.filter(delPublico)) {
+      for (const s of x.secciones || []) cuenta.set(s, (cuenta.get(s) || 0) + 1);
+    }
+    if (!cuenta.has(c.seccion)) c.seccion = "__TODAS__";
+    const opciones = [...cuenta.keys()]
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      .map((s) => ({ valor: s, etiqueta: `${traducirEtiqueta(s)} (${miles(cuenta.get(s))})` }));
+    hueco.innerHTML = "";
+    hueco.appendChild(selector(t("col_seccion"), [{ valor: "__TODAS__", etiqueta: t("todas") }, ...opciones],
+      c.seccion, (v) => { c.seccion = v; pintarLista(); }));
   }
 
   function pintarLista() {
+    // Si cambia cualquier filtro se vuelve a la primera página
+    const firma = JSON.stringify([c.texto, c.publico, c.seccion, c.estado]);
+    if (firma !== c.firma) { c.firma = firma; c.pagina = 1; }
     const buscado = c.texto.toLowerCase();
     const lista = d.series.filter((x) => (!buscado || x.nombre.toLowerCase().includes(buscado))
-      && (!c.solo_faltan || x.huecos || x.posteriores));
+      && delPublico(x)
+      && (c.seccion === "__TODAS__" || (x.secciones || []).includes(c.seccion))
+      && (c.estado === "todas" || (c.estado === "completas") === !faltanDe(x)));
     resumen.textContent = t("series_resumen", { n: miles(lista.length), t: miles(d.series.length) });
+    pintarCifrasSeries(cifras, lista);
     rejilla.innerHTML = "";
+    arriba.innerHTML = "";
+    abajo.innerHTML = "";
     if (!lista.length) {
       rejilla.appendChild(crear("p", "vacio", d.series.length ? t("sin_resultados") : t("series_ninguna")));
       return;
     }
-    lista.forEach((x) => rejilla.appendChild(tarjetaSerie(x)));
+    // Cuatro filas por página, con tantas columnas como quepan en la rejilla
+    const columnas = getComputedStyle(rejilla).gridTemplateColumns.split(" ").filter(Boolean).length || 4;
+    const porPagina = columnas * FILAS_SERIES_POR_PAGINA;
+    const paginas = Math.max(1, Math.ceil(lista.length / porPagina));
+    c.pagina = Math.min(Math.max(1, c.pagina), paginas);
+    const inicio = (c.pagina - 1) * porPagina;
+    lista.slice(inicio, inicio + porPagina).forEach((x) => rejilla.appendChild(tarjetaSerie(x, ignorar)));
+    if (paginas > 1) {
+      const ir = (n) => { c.pagina = n; pintarLista(); arriba.scrollIntoView({ block: "nearest" }); };
+      arriba.appendChild(paginador(c.pagina, paginas, ir));
+      abajo.appendChild(paginador(c.pagina, paginas, ir));
+    }
   }
+  pintarOcultas();
+  pintarSecciones();
   pintarLista();
 }
 
@@ -1873,7 +1937,34 @@ function abrirCompletarSeries() {
   pintar();
 }
 
-function tarjetaSerie(x) {
+const FILAS_SERIES_POR_PAGINA = 4;
+
+/** Cifras de las series a la vista: cuántas, cuántas se prestan, año medio de
+ *  publicación de los tomos propios y cuántas están incompletas (con los
+ *  ejemplares que faltan para completarlas: huecos y tomos posteriores). */
+function pintarCifrasSeries(caja, lista) {
+  const prestadas = lista.filter((x) => x.prestados > 0).length;
+  const anios = lista.flatMap((x) => x.filas.filter((f) => f.estado === "propio" && f.anio).map((f) => f.anio));
+  const anioMedio = anios.length ? Math.round(anios.reduce((a, b) => a + b, 0) / anios.length) : null;
+  const incompletas = lista.filter((x) => (x.huecos || 0) + (x.posteriores || 0) > 0);
+  const porAdquirir = incompletas.reduce((s, x) => s + (x.huecos || 0) + (x.posteriores || 0), 0);
+  const ejemplares = lista.reduce((s, x) => s + (x.ejemplares || 0), 0);
+  const de = (n) => t("diag_demanda_unidad", { n: miles(n) });
+  caja.replaceChildren(
+    tarjetaIndicador({ rotulo: t("ser_kpi_series"), valor: miles(lista.length), acento: PALETA.cian,
+      contexto: t("ser_kpi_series_ctx", { e: miles(ejemplares) }) }),
+    tarjetaIndicador({ rotulo: t("ser_kpi_prestadas"), valor: miles(prestadas), unidad: de(lista.length),
+      acento: PALETA.verde, contexto: t("ser_kpi_prestadas_ctx"),
+      grafico: graficoBala({ valor: lista.length ? (prestadas / lista.length) * 100 : 0, escala: 100, color: PALETA.verde }) }),
+    tarjetaIndicador({ rotulo: t("ser_kpi_anio"), valor: anioMedio ?? "—", acento: PALETA.violeta,
+      contexto: t("ser_kpi_anio_ctx") }),
+    tarjetaIndicador({ rotulo: t("ser_kpi_incompletas"), valor: miles(incompletas.length), unidad: de(lista.length),
+      acento: PALETA.ambar, contexto: t("ser_kpi_incompletas_ctx", { n: miles(porAdquirir) }) }),
+  );
+}
+
+function tarjetaSerie(x, alIgnorar) {
+  const envoltorio = crear("div", "envoltorio-serie");
   const boton = crear("button", "tarjeta-serie");
   boton.type = "button";
   boton.appendChild(miniaturaLibro({ cubierta: x.portada, titulo: x.nombre }, "mediana"));
@@ -1881,6 +1972,9 @@ function tarjetaSerie(x) {
   boton.appendChild(b);
   b.appendChild(crear("span", "nombre-serie", x.nombre));
   b.appendChild(crear("span", "datos-serie", t("series_tomos", { n: miles(x.tomos), u: miles(x.ultimo) })));
+  if ((x.secciones || []).length) {
+    b.appendChild(crear("span", "datos-serie", x.secciones.map(traducirEtiqueta).join(" · ")));
+  }
   if (x.anio_min) {
     b.appendChild(crear("span", "datos-serie",
       x.anio_min === x.anio_max ? String(x.anio_min) : `${x.anio_min}–${x.anio_max}`));
@@ -1894,13 +1988,23 @@ function tarjetaSerie(x) {
   uso.append(pista, crear("span", null, t("series_prestados", { p: miles(x.prestados), e: miles(x.ejemplares) })));
   b.appendChild(uso);
   const marcas = crear("span", "marcas-serie");
-  if (x.huecos) marcas.appendChild(distintivo(t("series_faltan", { n: miles(x.huecos) }), "aviso"));
-  if (x.posteriores) marcas.appendChild(distintivo(t("series_nuevos", { n: miles(x.posteriores) }), "info"));
+  // Un solo recuento de lo que falta: huecos en la numeración y tomos posteriores
+  const faltan = (x.huecos || 0) + (x.posteriores || 0);
+  if (faltan) marcas.appendChild(distintivo(t("series_faltan", { n: miles(faltan) }), "aviso"));
   if (x.posibles) marcas.appendChild(distintivo(t("series_posibles", { n: miles(x.posibles) }), "frio"));
-  if (!x.huecos && !x.posteriores) marcas.appendChild(distintivo(t("series_completa"), "ok"));
+  if (!faltan) marcas.appendChild(distintivo(t("series_completa"), "ok"));
   b.appendChild(marcas);
   boton.addEventListener("click", () => abrirSerie(x));
-  return boton;
+  envoltorio.appendChild(boton);
+  if (alIgnorar) {
+    const ignorar = crear("button", "ignorar-serie", "×");
+    ignorar.type = "button";
+    ignorar.title = t("series_ignorar");
+    ignorar.setAttribute("aria-label", `${t("series_ignorar")}: ${x.nombre}`);
+    ignorar.addEventListener("click", () => alIgnorar(x));
+    envoltorio.appendChild(ignorar);
+  }
+  return envoltorio;
 }
 
 // Catálogo de las librerías (CEGAL) con la búsqueda de la serie hecha: ahí
@@ -2017,14 +2121,7 @@ function esqueletoCompras(vista) {
   const raiz = crear("div", "panel-secciones panel-compras");
   const filtros = crear("div", "barra-superior barra-panel");
   const rejilla = crear("div", "rejilla-compras");
-  const indicadores = crear("div", "fila-indicadores");
-  const huecos = { raiz, filtros, rejilla, indicadores, kpis: [] };
-  for (let i = 0; i < 5; i++) {
-    const h = crear("div", "hueco-indicador");
-    indicadores.appendChild(h);
-    huecos.kpis.push(h);
-  }
-  rejilla.appendChild(indicadores);
+  const huecos = { raiz, filtros, rejilla };
   const hueco = (clase) => { const h = crear("div", `hueco ${clase}`); rejilla.appendChild(h); return h; };
   huecos.matriz = hueco("zona-matriz");
   huecos.secciones = hueco("zona-secciones-compra");
@@ -2039,6 +2136,12 @@ async function vistaCompras(vista) {
   soltarMedidores();
   const c = estado.controles.compras;
   if (!c.anio_minimo) c.anio_minimo = estado.config.anio_actual - 4;   // últimos 5 años
+  // «Publicado hasta» empieza en hoy, para que no salgan preventas lejanas
+  // (hay altas de DILVE con fecha de 2030). Si se borra, queda vacío.
+  if (c.pub_hasta === undefined) {
+    const hoy = new Date();
+    c.pub_hasta = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+  }
   const fuentes = fuentesCompra().map((f) => f.clave);
   if (!fuentes.includes(c.fuente)) c.fuente = fuentes[0];
   const huecos = esqueletoCompras(vista);
@@ -2049,25 +2152,15 @@ async function refrescarCompras(huecos) {
   const c = estado.controles.compras;
   const numero = ++peticionCompras;
   huecos.rejilla.classList.add("actualizando");
-  let datos, datosFondo;
+  let datos;
   try {
-    // El diagnóstico de cabecera (volúmenes, docs/habitante, circulación,
-    // actualidad) es siempre el del fondo COMPLETO, sin los filtros de esta
-    // pestaña: es la referencia constante frente a la que se decide comprar.
-    [datos, datosFondo] = await Promise.all([
-      API.panelCompras(estado.sesion),
-      API.buscar(estado.sesion, {
-        campo: "signatura", texto: "", publico: "todo", idioma: "__TODOS__", loc: "__TODAS__",
-        por_pagina: 1, ligero: true, ui: IDIOMA,
-      }),
-    ]);
+    datos = await API.panelCompras(estado.sesion);
   } finally {
     if (numero === peticionCompras) huecos.rejilla.classList.remove("actualizando");
   }
   if (numero !== peticionCompras || !huecos.raiz.isConnected) return;
   const recargar = () => refrescarCompras(huecos).catch((e) => huecos.filtros.after(aviso("error", e.message)));
   const a = prepararCompras(datos);
-  const aFondo = prepararDiagnostico(datosFondo, { texto: "", loc: "__TODAS__", publico: "todo", idioma: "__TODOS__" });
 
   cerrarCajonLibro();
   huecos.filtros.innerHTML = "";
@@ -2080,7 +2173,6 @@ async function refrescarCompras(huecos) {
   };
   estado.repintarFiltrosCompras = repintarFiltros;
   pintarFiltrosCompras(huecos.filtros, c, datos, recargar);
-  pintarKpisCompras(huecos.kpis, a, c, aFondo);
   pintarMatrizCompras(huecos.matriz, a, c, recargar);
   pintarSeccionesCompras(huecos.secciones, a, c, recargar);
   // Lo único que cambia entre fuentes es la lista: el diagnóstico de arriba
@@ -2173,6 +2265,8 @@ function pintarFiltrosNovedades(barra, c, recargar) {
   // afinidad con su «?» y, si está marcado, la comparación con el histórico;
   // después, qué novedades se ven.
   const casillas = crear("div", "fila-opciones");
+  barra.appendChild(campoFecha(t("pub_desde"), c.pub_desde, (v) => { c.pub_desde = v; recargar(); }));
+  barra.appendChild(campoFecha(t("pub_hasta"), c.pub_hasta, (v) => { c.pub_hasta = v; recargar(); }));
   casillas.appendChild(casilla(t("nov_personalizadas"), c.personalizadas, (v) => { c.personalizadas = v; recargar(); }));
   casillas.appendChild(ayudaAfinidad());
   if (c.personalizadas) {
@@ -2181,14 +2275,12 @@ function pintarFiltrosNovedades(barra, c, recargar) {
     casillas.appendChild(comparar);
   }
   casillas.appendChild(casilla(t("excluir_fondo"), c.ocultar_propios !== false, (v) => { c.ocultar_propios = v; recargar(); }));
-  // Muchas altas de DILVE son libros que aún no han salido: por defecto se ven
-  // solo los que ya están publicados a día de hoy.
-  casillas.appendChild(casilla(t("solo_publicados"), c.solo_publicados !== false,
-                                 (v) => { c.solo_publicados = v; recargar(); }));
-  // Preventas: lo que sale en los próximos 3 meses, ni un día más (hay altas
-  // con fecha de 2030). Con las dos casillas: lo publicado y lo inminente.
-  casillas.appendChild(casilla(t("proximos_3_meses"), c.proximos_3_meses !== false,
-                                 (v) => { c.proximos_3_meses = v; recargar(); }));
+  // Tomos de las series que ya tiene la biblioteca (por nombre de serie o colección)
+  casillas.appendChild(casilla(t("nov_solo_series"), Boolean(c.solo_series), (v) => { c.solo_series = v; recargar(); }));
+  // Libros con algún premio en su ficha de DILVE
+  casillas.appendChild(casilla(t("nov_premiados"), Boolean(c.solo_premiados), (v) => { c.solo_premiados = v; recargar(); }));
+  // Las fechas se acotan con «Año de publicación» (de – a); ya no hay casillas
+  // de «solo publicados» ni «próximos 3 meses».
   barra.appendChild(casillas);
 }
 
@@ -2221,10 +2313,8 @@ function pintarFiltrosAutores(barra, c, recargar) {
     barra.appendChild(selector(t("aut_edad"), conCuenta(c.edades_autores, t("todas")),
       c.aut_tramo || "", (v) => { c.aut_tramo = v; recargar(); }));
   }
-  const casillasAut = crear("div", "casillas-compra");
-  casillasAut.appendChild(casilla(t("solo_publicados"), c.solo_publicados !== false,
-                                  (v) => { c.solo_publicados = v; recargar(); }));
-  barra.appendChild(casillasAut);
+  barra.appendChild(campoFecha(t("pub_desde"), c.pub_desde, (v) => { c.pub_desde = v; recargar(); }));
+  barra.appendChild(campoFecha(t("pub_hasta"), c.pub_hasta, (v) => { c.pub_hasta = v; recargar(); }));
   barra.appendChild(crear("p", "ayuda-filtros", t("aut_ayuda")));
   const acciones = crear("div", "casillas-compra");
   const recalcular = crear("button", "boton secundario pequeno", t("aut_recalcular"));
@@ -2243,19 +2333,6 @@ function pintarFiltrosAutores(barra, c, recargar) {
 // donde más falta hace comprar (propio de este panel). Es la misma cabecera
 // para las dos fuentes (autores y novedades): da el
 // contexto de la colección mientras solo cambia la lista de abajo.
-function pintarKpisCompras(huecos, a, c, aFondo) {
-  const tarjetas = tarjetasResumenColeccion(aFondo);
-  tarjetas.push(tarjetaIndicador({
-    rotulo: t("secciones_prioritarias"), valor: miles(a.prioritarias.length),
-    unidad: t("diag_demanda_unidad", { n: miles(a.puntos.length) }), acento: PALETA.ambar,
-    explicacion: ayudaUsoRelativo(),
-    grafico: rejillaCuenta(a.puntos.map((p) => ({
-      clase: a.prioritarias.includes(p) ? "encima" : "debajo", titulo: p.etiqueta }))),
-    contexto: t("prioritarias_ctx"),
-  }));
-  tarjetas.forEach((tarjeta, i) => huecos[i].replaceChildren(tarjeta));
-}
-
 /* --- Dónde comprar: matriz ------------------------------------------------- */
 function pintarMatrizCompras(hueco, a, c, recargar) {
   const cuerpo = cuadroPanel(hueco, t("matriz_titulo"), null, ayudaUsoRelativo());
@@ -2428,7 +2505,8 @@ async function pintarAutores(hueco, c, recargar) {
     d = await API.sugerenciasAutores(estado.sesion, false,
                                      { idioma: c.aut_idioma || "", seccion: seccionFiltroDilve(c, "aut_seccion"),
                                        tramo: c.aut_tramo || "",
-                                       solo_publicados: c.solo_publicados !== false ? "true" : "false" });
+                                       solo_publicados: "false",     // las fechas, con «Año de publicación»
+                                       desde: diaDe(c.pub_desde), hasta: diaDe(c.pub_hasta) });
   }
   catch (e) { cuerpo.replaceChildren(aviso("error", e.message)); return; }
   if (!hueco.isConnected) return;
@@ -2494,9 +2572,11 @@ async function pintarNovedades(hueco, c, recargar) {
     seccion: seccionFiltroDilve(c, "nov_seccion"), idioma: c.nov_idioma || "", editorial: c.nov_editorial || "",
     forma: c.nov_forma || "", thema: c.nov_thema || "",
     texto: c.nov_texto || "", personalizadas: c.personalizadas,
-    solo_publicados: c.solo_publicados !== false ? "true" : "false",
-    proximos_3_meses: c.proximos_3_meses !== false ? "true" : "false",
+    solo_publicados: "false", proximos_3_meses: "false",   // las fechas, con «Año de publicación»
+    solo_premiados: Boolean(c.solo_premiados),
     ocultar_propios: c.ocultar_propios !== false,
+    solo_series: Boolean(c.solo_series),
+    desde: diaDe(c.pub_desde), hasta: diaDe(c.pub_hasta),
   };
   // Si cambia cualquier filtro se vuelve a la primera página
   const firma = JSON.stringify(filtros);
@@ -2528,6 +2608,134 @@ async function pintarNovedades(hueco, c, recargar) {
     pie.appendChild(paginador(d.pagina, d.paginas, (n) => { c.nov_pagina = n; recargar(); }));
     rejilla.appendChild(pie);
   }
+}
+
+/** Campo de fecha DD/MM/AAAA: se escribe encima (las barras se ponen solas)
+ *  o se elige en el calendario que se abre al pulsarlo. El calendario no quita
+ *  el foco al campo, así que se puede seguir escribiendo con él abierto.
+ *  Valor: "AAAA-MM-DD" o null. */
+function campoFecha(rotulo, valor, alCambiar) {
+  const campo = crear("div", "campo campo-fecha");
+  const id = `fecha-${Math.random().toString(36).slice(2, 8)}`;
+  const etiqueta = crear("label", null, rotulo);
+  etiqueta.htmlFor = id;
+  const envoltorio = crear("div", "fecha-envoltorio");
+  const entrada = crear("input");
+  Object.assign(entrada, { id, type: "text", inputMode: "numeric", autocomplete: "off", maxLength: 10,
+                           placeholder: t("fecha_formato") });
+  const dos = (n) => String(n).padStart(2, "0");
+  const aISO = (f) => `${f.getFullYear()}-${dos(f.getMonth() + 1)}-${dos(f.getDate())}`;
+  const aTexto = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "");
+  const leer = (texto) => {               // "DD/MM/AAAA" → "AAAA-MM-DD"; "" → null; mal escrito → undefined
+    if (!texto.trim()) return null;
+    const m = texto.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return undefined;
+    const f = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+    return f.getDate() === Number(m[1]) && f.getMonth() === Number(m[2]) - 1 ? aISO(f) : undefined;
+  };
+  let actual = valor || null;
+  entrada.value = aTexto(actual);
+  const calendario = crear("div", "calendario");
+  calendario.hidden = true;
+  let mes = actual ? new Date(`${actual}T00:00`) : new Date();
+  mes = new Date(mes.getFullYear(), mes.getMonth(), 1);
+
+  const confirmar = () => {
+    const leido = leer(entrada.value);
+    entrada.classList.toggle("no-valida", leido === undefined);
+    entrada.title = leido === undefined ? t("fecha_no_valida") : "";
+    if (leido === undefined || leido === actual) return;
+    actual = leido;
+    entrada.value = aTexto(actual);
+    if (actual) mes = new Date(Number(actual.slice(0, 4)), Number(actual.slice(5, 7)) - 1, 1);
+    alCambiar(actual);
+  };
+  const boton = (texto, clase, accion, titulo) => {
+    const b = crear("button", clase, texto);
+    b.type = "button";
+    if (titulo) { b.title = titulo; b.setAttribute("aria-label", titulo); }
+    b.addEventListener("mousedown", (e) => e.preventDefault());     // el foco sigue en el campo
+    b.addEventListener("click", accion);
+    return b;
+  };
+  const elegir = (iso) => { entrada.value = aTexto(iso); calendario.hidden = true; confirmar(); };
+  function pintarCalendario() {
+    calendario.innerHTML = "";
+    const cabeza = crear("div", "cabeza-calendario");
+    const cambiarMes = (n) => () => { mes = new Date(mes.getFullYear(), mes.getMonth() + n, 1); pintarCalendario(); };
+    cabeza.append(
+      boton("‹", "flecha-calendario", cambiarMes(-1), t("pagina_anterior")),
+      crear("span", "mes-calendario", mayusculaInicial(new Intl.DateTimeFormat(IDIOMA, { month: "long", year: "numeric" }).format(mes))),
+      boton("›", "flecha-calendario", cambiarMes(1), t("pagina_siguiente")),
+    );
+    const dias = crear("div", "dias-calendario");
+    const semana = new Intl.DateTimeFormat(IDIOMA, { weekday: "narrow" });
+    // El 1 de enero de 2024 fue lunes: la semana empieza en lunes
+    for (let i = 0; i < 7; i++) dias.appendChild(crear("span", "dia-semana", semana.format(new Date(2024, 0, 1 + i))));
+    const hueco = (mes.getDay() + 6) % 7;
+    for (let i = 0; i < hueco; i++) dias.appendChild(crear("span"));
+    const hoy = aISO(new Date());
+    const total = new Date(mes.getFullYear(), mes.getMonth() + 1, 0).getDate();
+    for (let d = 1; d <= total; d++) {
+      const iso = aISO(new Date(mes.getFullYear(), mes.getMonth(), d));
+      const clase = ["dia-calendario", iso === actual ? "elegido" : "", iso === hoy ? "hoy" : ""].join(" ").trim();
+      dias.appendChild(boton(String(d), clase, () => elegir(iso)));
+    }
+    const pie = crear("div", "pie-calendario");
+    pie.append(boton(t("fecha_hoy"), "enlace-discreto", () => elegir(hoy)),
+               boton(t("fecha_borrar"), "enlace-discreto", () => elegir(null)));
+    calendario.append(cabeza, dias, pie);
+  }
+  const abrir = () => { if (calendario.hidden) { pintarCalendario(); calendario.hidden = false; } };
+  entrada.addEventListener("click", abrir);
+  entrada.addEventListener("focus", abrir);
+  entrada.addEventListener("blur", () => { calendario.hidden = true; confirmar(); });
+  entrada.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { calendario.hidden = true; confirmar(); }
+    if (e.key === "Escape") calendario.hidden = true;
+  });
+  // Al escribir, solo cifras y las barras en su sitio (DD/MM/AAAA)
+  entrada.addEventListener("input", () => {
+    const cifras = entrada.value.replace(/\D/g, "").slice(0, 8);
+    entrada.value = [cifras.slice(0, 2), cifras.slice(2, 4), cifras.slice(4)].filter(Boolean).join("/");
+    const leido = leer(entrada.value);
+    if (leido && !calendario.hidden) {
+      mes = new Date(Number(leido.slice(0, 4)), Number(leido.slice(5, 7)) - 1, 1);
+      pintarCalendario();
+    }
+  });
+  envoltorio.append(entrada, calendario);
+  campo.append(etiqueta, envoltorio);
+  return campo;
+}
+
+/** «octubre de 2026» → «Octubre de 2026» (solo la primera letra). */
+const mayusculaInicial = (texto) => texto.charAt(0).toUpperCase() + texto.slice(1);
+
+/** "AAAA-MM-DD" → "AAAAMMDD" para la API ("" si no hay fecha). */
+const diaDe = (iso) => (/^\d{4}-\d{2}-\d{2}$/.test(iso || "") ? iso.replaceAll("-", "") : "");
+
+/** Intervalo de años «de – a», con cualquiera de los dos límites opcional. */
+function campoRangoAnios(rotulo, valorDesde, valorHasta, alCambiar) {
+  const campo = crear("div", "campo campo-rango-anios");
+  campo.appendChild(crear("span", "rotulo-campo", rotulo));
+  const caja = crear("div", "rango-anios");
+  const entrada = (valor, texto) => {
+    const e = crear("input");
+    e.type = "number";
+    e.placeholder = texto;
+    e.setAttribute("aria-label", `${rotulo}: ${texto}`);
+    e.value = valor ?? "";
+    return e;
+  };
+  const desde = entrada(valorDesde, t("anio_desde"));
+  const hasta = entrada(valorHasta, t("anio_hasta"));
+  const confirmar = () => alCambiar(desde.value ? Number(desde.value) : null, hasta.value ? Number(hasta.value) : null);
+  desde.addEventListener("change", confirmar);
+  hasta.addEventListener("change", confirmar);
+  caja.append(desde, crear("span", "separador-rango", "–"), hasta);
+  campo.appendChild(caja);
+  return campo;
 }
 
 /** Anterior · Página X de Y · Siguiente, con salto a la primera y la última. */
@@ -2624,6 +2832,11 @@ function insigniasLibro(f) {
                               f.idioma ? "frio" : "neutral"));
   if (f.edad !== null && f.edad !== undefined) caja.appendChild(distintivo(t("desde_n_anios", { n: f.edad }), "neutral"));
   if (f.ya_en_fondo) caja.appendChild(distintivo(t("en_tu_fondo"), "aviso"));
+  if (f.serie_biblioteca) {
+    const sb = f.serie_biblioteca;
+    caja.appendChild(distintivo(sb.numero !== null && sb.numero !== undefined
+      ? t("serie_tuya_n", { s: sb.nombre, n: sb.numero }) : t("serie_tuya", { s: sb.nombre }), "ok"));
+  }
   if (f.del_autor === false) caja.appendChild(distintivo(t("sug_editorial"), "aviso"));
   if ((f.premios || []).length) caja.appendChild(distintivo(f.premios[0], "ok"));
   return caja;
@@ -2840,6 +3053,15 @@ function abrirCajonLibro(f, opciones = {}) {
   const principal = crear("div", "principal-cajon");
   principal.appendChild(crear("h3", null, f.titulo || "—"));
   if (f.subtitulo) principal.appendChild(crear("p", "sub-cajon", f.subtitulo));
+  // Muestra de lectura que da la editorial en DILVE (primeras páginas)
+  if (/^https?:\/\//.test(f.muestra || "")) {
+    const muestra = crear("a", "boton secundario boton-muestra", t("leer_muestra"));
+    muestra.href = f.muestra;
+    muestra.target = "_blank";
+    muestra.rel = "noopener noreferrer";
+    muestra.title = t("leer_muestra_ayuda");
+    principal.appendChild(muestra);
+  }
   cabecera.appendChild(principal);
   cajon.appendChild(cabecera);
   const ficha = crear("dl", "ficha-cajon");
@@ -2852,6 +3074,7 @@ function abrirCajonLibro(f, opciones = {}) {
   dato(t("ficha_editorial"), f.editorial);
   dato(t("ficha_publicacion"), fechaOnix(f.fecha));
   dato(t("nov_coleccion"), f.coleccion);
+  dato(t("nov_serie"), f.serie && (f.num_serie ? `${f.serie} · ${f.num_serie}` : f.serie));
   dato(t("col_seccion"), `${traducirEtiqueta(f.seccion || "")} (${f.motivo_seccion || ""})`);
   if ((f.otras_secciones || []).length) {
     dato(t("tambien_en"), f.otras_secciones.map(([s, m]) => `${traducirEtiqueta(s)} (${m})`).join(" · "));
