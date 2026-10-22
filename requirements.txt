@@ -12,3 +12,6 @@ pymarc>=5.1
 # Para DILVE (novedades, fichas y sugerencias de compra).
 requests>=2.31
 lxml>=5.0
+# Miniaturas de las portadas (backend/portadas.py). Sin ella funciona igual,
+# pero guarda las portadas a tamaño original.
+pillow>=9.1

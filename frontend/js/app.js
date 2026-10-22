@@ -2813,7 +2813,10 @@ function miniaturaLibro(f, tamano) {
     const img = crear("img");
     img.loading = "lazy";
     img.alt = "";
-    img.src = f.cubierta;
+    // Miniatura guardada en local por el servidor (las portadas de DILVE son
+    // originales de cientos de KB); en la demo sin servidor, la de origen.
+    img.src = !MODO_DEMO && /^https?:\/\//.test(f.cubierta)
+      ? `/api/portada?url=${encodeURIComponent(f.cubierta)}` : f.cubierta;
     img.addEventListener("error", () => { img.remove(); caja.classList.add("sin-portada"); caja.textContent = (f.titulo || "?").slice(0, 2); });
     caja.appendChild(img);
   } else {
@@ -3053,14 +3056,29 @@ function abrirCajonLibro(f, opciones = {}) {
   const principal = crear("div", "principal-cajon");
   principal.appendChild(crear("h3", null, f.titulo || "—"));
   if (f.subtitulo) principal.appendChild(crear("p", "sub-cajon", f.subtitulo));
-  // Muestra de lectura que da la editorial en DILVE (primeras páginas)
+  // Muestra de lectura que da la editorial en DILVE (primeras páginas). Si la
+  // ficha es anterior a que se guardara el enlace, se pide a DILVE al abrirla.
+  const botonMuestra = (url) => {
+    const a = crear("a", "boton secundario boton-muestra", t("leer_muestra"));
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.title = t("leer_muestra_ayuda");
+    return a;
+  };
   if (/^https?:\/\//.test(f.muestra || "")) {
-    const muestra = crear("a", "boton secundario boton-muestra", t("leer_muestra"));
-    muestra.href = f.muestra;
-    muestra.target = "_blank";
-    muestra.rel = "noopener noreferrer";
-    muestra.title = t("leer_muestra_ayuda");
-    principal.appendChild(muestra);
+    principal.appendChild(botonMuestra(f.muestra));
+  } else if (f.isbn && !MODO_DEMO && estado.sesion) {
+    const buscando = crear("span", "nota-muestra", t("buscando_muestra"));
+    principal.appendChild(buscando);
+    API.muestra(estado.sesion, f.isbn)
+      .then((r) => {
+        if (/^https?:\/\//.test(r.muestra || "")) {
+          f.muestra = r.muestra;
+          buscando.replaceWith(botonMuestra(r.muestra));
+        } else buscando.remove();
+      })
+      .catch(() => buscando.remove());
   }
   cabecera.appendChild(principal);
   cajon.appendChild(cabecera);

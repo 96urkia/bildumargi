@@ -2,4 +2,4 @@
 # la aplicación de escritorio de Windows (packaging\windows\construir.ps1).
 pywebview>=5.1        # la ventana propia (WebView2, el motor de Edge que trae Windows)
 pyinstaller>=6.6      # empaqueta Python y el programa en Bildumargi.exe
-pillow>=9.1           # dibuja el icono
+pillow>=9.1           # dibuja el icono (y, ya en requirements.txt, las miniaturas de portadas)

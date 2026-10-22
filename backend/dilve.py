@@ -40,6 +40,10 @@ LECTOR_COLECCIONES = "2026-10-11T16:45:00Z"
 # Ángel») solo se guardaba el primer nombre y la serie se perdía. Las fichas
 # con colección guardadas antes se vuelven a pedir una vez.
 LECTOR_SUBCOLECCIONES = "2026-10-21T19:45:00Z"
+# Desde esta fecha se guarda el enlace a la muestra de lectura (SupportingResource
+# de tipo 15). Las fichas anteriores no lo tienen: se piden una a una, al abrir
+# la ficha del libro (ver /api/sesion/{token}/muestra/{isbn}).
+LECTOR_MUESTRAS = "2026-10-22T00:00:00Z"
 VENTANA_DIAS = 7
 DIAS_SIN_FICHA = 60          # cuánto se recuerda que un ISBN no está en DILVE
 PAUSA = 6.0                  # segundos entre llamadas: lo que recomienda DILVE

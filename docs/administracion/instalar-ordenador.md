@@ -20,7 +20,7 @@ Solo hace falta **Python 3.10 o superior**; el zip trae todo lo demás.
     [python.org](https://www.python.org/downloads/) e instálalo marcando la
     casilla **«Add Python to PATH»**.
 
-    **2. Descarga y descomprime Bildumargi.** Descarga `bildumargi-2.1.zip`
+    **2. Descarga y descomprime Bildumargi.** Descarga `bildumargi-2.1.1.zip`
     de la [página de versiones](https://github.com/96urkia/bildumargi/releases)
     y descomprímelo (clic derecho → «Extraer todo») en una carpeta, por
     ejemplo `C:\Bildumargi`.
@@ -29,7 +29,7 @@ Solo hace falta **Python 3.10 o superior**; el zip trae todo lo demás.
     sistema, entra en la carpeta y ejecuta:
 
     ```
-    cd C:\Bildumargi\bildumargi-2.1
+    cd C:\Bildumargi\bildumargi-2.1.1
     pip install -r requirements.txt
     ```
 
@@ -59,9 +59,9 @@ Solo hace falta **Python 3.10 o superior**; el zip trae todo lo demás.
 
     ```
     cd ~
-    wget https://github.com/96urkia/bildumargi/releases/latest/download/bildumargi-2.1.zip
-    unzip bildumargi-2.1.zip
-    cd bildumargi-2.1
+    wget https://github.com/96urkia/bildumargi/releases/latest/download/bildumargi-2.1.1.zip
+    unzip bildumargi-2.1.1.zip
+    cd bildumargi-2.1.1
     ```
 
     **3. Crea el entorno virtual e instala las librerías (solo la primera
@@ -92,7 +92,7 @@ Solo hace falta **Python 3.10 o superior**; el zip trae todo lo demás.
     basta con:
 
     ```
-    cd ~/bildumargi-2.1
+    cd ~/bildumargi-2.1.1
     . venv/bin/activate
     bash iniciar.sh
     ```

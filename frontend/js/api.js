@@ -146,6 +146,7 @@ const API = {
     `/api/sesion/${s}/sugerencias/autores${parametros({ recalcular: recalcular || "", ...(filtros || {}) })}`),
   sugerenciasNovedades: (s, q) => pedir(`/api/sesion/${s}/sugerencias/novedades${parametros(q)}`),
   thema: (ui) => pedir(`/api/thema${parametros({ ui })}`),
+  muestra: (s, isbn) => pedir(`/api/sesion/${s}/muestra/${encodeURIComponent(isbn)}`),
   evaluacionAfinidad: (s, corte) => pedir(`/api/sesion/${s}/sugerencias/evaluacion${parametros({ corte: corte || "" })}`),
   historial: (s) => pedir(`/api/sesion/${s}/historial`),
   abrirCarga: (s, id) => pedir(`/api/sesion/${s}/historial/${encodeURIComponent(id)}/abrir`, { method: "POST" }),

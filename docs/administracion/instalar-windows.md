@@ -7,13 +7,13 @@ permisos de administrador.**
 ## 1. Descarga el instalador
 
 En la [página de versiones](https://github.com/96urkia/bildumargi/releases),
-descarga **`Bildumargi-2.1-instalador.exe`** (unos 30 MB).
+descarga **`Bildumargi-2.1.1-instalador.exe`** (unos 30 MB).
 
 ??? info "Comprobar que el fichero ha llegado entero (opcional)"
     Junto al instalador está su huella `SHA-256`. En PowerShell:
 
     ```
-    Get-FileHash .\Bildumargi-2.1-instalador.exe
+    Get-FileHash .\Bildumargi-2.1.1-instalador.exe
     ```
 
     El código debe ser igual al publicado.

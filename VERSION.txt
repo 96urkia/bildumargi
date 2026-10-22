@@ -1,11 +1,23 @@
 Bildumargi
-Versión: 2.1
+Versión: 2.1.1
 Licencia: AGPLv3
 
 Versión para bibliotecas individuales: se instala en Windows con un
 instalador (acceso directo y ventana propia), con iniciar.bat / iniciar.sh, o
 en un servidor Linux con el paquete .deb. Manual:
 https://96urkia.github.io/bildumargi/
+
+Cambios de la versión 2.1.1
+---------------------------
+- Portadas mucho más rápidas: cada portada de DILVE se descarga una sola vez,
+  se reduce a una miniatura (de unos 800 KB de media a 15-55 KB) y se guarda
+  en la carpeta de datos (cache/portadas). Una página de Novedades pasa de
+  unos 40 MB a unos 2 MB, y las siguientes veces carga al momento.
+- «Leer muestra» también con las fichas descargadas antes de la 2.1: al
+  abrir la ficha de un libro se pide a DILVE ese ISBN (una llamada, con la
+  pausa y la cuota de siempre) y el enlace queda guardado.
+- Pillow pasa a ser una de las librerías necesarias (requirements.txt). Sin
+  ella todo funciona, pero las portadas se guardan a tamaño original.
 
 Cambios de la versión 2.1
 --------------------------
@@ -412,7 +424,7 @@ Versión 2026.09.18
 
 Cómo comprobar que estás ejecutando ESTA versión
 ------------------------------------------------
-Al arrancar, la ventana de la terminal muestra "Bildumargi 2.1".
+Al arrancar, la ventana de la terminal muestra "Bildumargi 2.1.1".
 En la aplicación, el menú lateral muestra:
    Diagnóstico · Secciones · Series · Seguimiento                          (sin cuenta de DILVE)
    Diagnóstico · Secciones · Series · Sugerencias de compra · Seguimiento  (con cuenta de DILVE)

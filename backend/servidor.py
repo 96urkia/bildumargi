@@ -28,6 +28,7 @@ import config  # noqa: E402
 from backend import absysnet, analisis, bibliotecas, clasificacion  # noqa: E402
 from backend import almacen as mod_almacen, configuracion as mod_configuracion  # noqa: E402
 from backend import dilve as mod_dilve, materias as mod_materias, sugerencias as mod_sugerencias  # noqa: E402
+from backend import portadas as mod_portadas  # noqa: E402
 from backend import idiomas as mod_idiomas, utils  # noqa: E402
 from backend import thema as mod_thema  # noqa: E402
 from backend import afinidad as mod_afinidad  # noqa: E402
@@ -1379,6 +1380,54 @@ def api_series_completar_accion(token: str, accion: str, x_admin: str = Header(N
     pendientes, releer, _, _ = _candidatos_series(sesion)
     _lanzar_descarga(pendientes, releer, "series")
     return api_series_completar(token)
+
+
+# ===========================================================================
+# Portadas: miniaturas guardadas en local (ver backend/portadas.py)
+# ===========================================================================
+CARPETA_PORTADAS = os.path.join(config.RUTA_DATOS, "cache", "portadas")
+
+
+@app.get("/api/portada")
+def api_portada(url: str):
+    """Miniatura de una portada de DILVE: la primera vez se descarga y se
+    reduce; después sale del disco."""
+    ruta = mod_portadas.miniatura(url, CARPETA_PORTADAS)
+    if not ruta:
+        raise HTTPException(status_code=404, detail="Sin portada.")
+    return FileResponse(ruta, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=2592000"})
+
+
+@app.get("/api/sesion/{token}/muestra/{isbn}")
+def api_muestra(token: str, isbn: str):
+    """Enlace a la muestra de lectura de un libro. Si su ficha se descargó
+    antes de que se guardara ese enlace, se vuelve a pedir a DILVE solo ese
+    ISBN (una llamada, con la pausa y la cuota de siempre) y se guarda."""
+    obtener_sesion(token)
+    isbn = "".join(c for c in isbn if c.isdigit() or c in "Xx")
+    destino = None
+    for base in (_base_fichas(), base_dilve() if os.path.exists(RUTA_DILVE) else None):
+        if base is None or not base.conn:
+            continue
+        fila = base.conn.execute("SELECT muestra, actualizado FROM novedades WHERE isbn = ?", (isbn,)).fetchone()
+        if fila is None:
+            continue
+        if fila["muestra"] or (fila["actualizado"] or "") >= mod_dilve.LECTOR_MUESTRAS:
+            return {"muestra": fila["muestra"]}
+        destino = base
+        break
+    if destino is None:                          # sin ficha de DILVE: no se pide nada
+        return {"muestra": None}
+    cliente = cliente_dilve()
+    cuota = cuota_dilve()
+    if cliente is None or cuota.bloqueo() or cuota.usadas_hoy() >= cuota.maximo_diario:
+        return {"muestra": None}
+    try:
+        nuevas = cliente.fichas([isbn])
+    except mod_dilve.ErrorDILVE:
+        return {"muestra": None}
+    destino.guardar(nuevas)
+    return {"muestra": next((p.get("muestra") for p in nuevas if p["isbn"] == isbn), None)}
 
 
 @app.get("/api/sesion/{token}/series")
