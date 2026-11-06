@@ -1490,7 +1490,8 @@ function graficoEvolucion(puntos, { ancho, alto, color, formato, titulo }) {
       c.appendChild(svgEl("title", {}, `${fecha}: ${formato(p.valor)}`));
       svg.appendChild(c);
     }
-    if (i % salto === 0 || i === puntos.length - 1) {
+    // El último rótulo siempre sale: el anterior se omite si chocaría con él
+    if ((i % salto === 0 && X(puntos.length - 1) - X(i) > 60) || i === puntos.length - 1) {
       // Los extremos se alinean hacia dentro para que no se corten
       const ancla = puntos.length > 1 && i === 0 ? "start" : puntos.length > 1 && i === puntos.length - 1 ? "end" : "middle";
       svg.appendChild(svgEl("text", { x: X(i), y: m.arriba + h + 15, "text-anchor": ancla, class: "etiqueta-eje" }, fecha));

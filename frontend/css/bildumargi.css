@@ -1417,6 +1417,26 @@ body.con-informe { overflow: hidden; }
 .tabla-informe tr.pequena td { color: #5C626D; }
 .tabla-informe td.encima { color: var(--uso-encima-texto, #9A6700); font-weight: 600; }
 .tabla-informe td.debajo { color: var(--uso-debajo-texto, #1B63A6); }
+.kpis-informe.cuatro { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.informe .pautas-comparacion { flex: none; gap: .4mm; margin-top: 1.6mm; }
+.informe .pautas-comparacion-cabeza { font-size: 7pt; }
+.informe .pautas-barra-fila { flex: none; height: 4mm; min-height: 0; grid-template-columns: 15mm minmax(0, 1fr); }
+.informe .pautas-barra-rotulo, .informe .pautas-tramo { font-size: 6.8pt; }
+.fila-informe { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5mm; }
+.fila-cotejo { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+.columna-informe { display: flex; flex-direction: column; gap: 3mm; min-width: 0; }
+.tabla-paises th:first-child { width: 36%; }
+.tabla-informe tr.ine-resto td { font-style: italic; color: #5C626D; }
+.tabla-informe tr.ine-total td { font-weight: 600; border-top: 1px solid #16181D; }
+.informe .ine-leyenda { font-size: 7pt; margin-bottom: 1mm; }
+.cotejo-informe { height: 62mm; display: flex; flex-direction: column; }
+.informe .ine-columnas { gap: 2mm; }
+.informe .ine-col-barras { gap: .6mm; }
+.informe .ine-col-valor { font-size: 6.5pt; }
+.informe .ine-col-nombre { font-size: 7pt; white-space: normal; }
+.informe .ine-col-nombre small { font-size: 6.2pt; }
+.informe .ine-nota { font-size: 7pt; margin-top: 1mm; opacity: 1; color: #434852; }
+.informe .ine-lenguas { flex: none; overflow: visible; }
 .notas-informe ol { margin: 0; padding-left: 4.5mm; font-size: 7.2pt; color: #434852; display: flex; flex-direction: column; gap: .8mm; }
 
 @page { size: A4; margin: 0; }
