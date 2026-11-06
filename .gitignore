@@ -19,6 +19,7 @@ datos/bibliotecas/
 datos/valoraciones.db
 datos/dilve/
 datos/cache/
+datos/ine/
 datos/preferencias.json
 # Lista de encabezados THEMA de EDItEUR: cada red la descarga (licencia propia)
 datos/thema*.json

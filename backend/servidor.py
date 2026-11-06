@@ -35,6 +35,8 @@ from backend import afinidad as mod_afinidad  # noqa: E402
 from backend import cambios as mod_cambios  # noqa: E402
 from backend import series as mod_series  # noqa: E402
 from backend import marc as mod_marc  # noqa: E402
+from backend import ine as mod_ine  # noqa: E402
+from backend import pautas as mod_pautas  # noqa: E402
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND = os.path.join(RAIZ, "frontend")
@@ -714,6 +716,7 @@ def _analizar_subidos(subidos):
     with _CANDADO:
         SESIONES[token] = Sesion(registros, fichas, biblioteca, huerfanos)
     sesion = SESIONES[token]
+    threading.Thread(target=_actualizar_habitantes, daemon=True, name="habitantes-ine").start()
     sesion.topo = asignados.get("topo")
     sesion.cuenta_idiomas = cuenta_idiomas
 
@@ -1706,6 +1709,146 @@ def api_thema(ui: str = "es"):
 # ===========================================================================
 # Abrir el último análisis guardado sin volver a subir los ficheros
 # ===========================================================================
+# --- Población y demografía (INE) ----------------------------------------------
+_CLIENTE_INE = mod_ine.Cliente(os.path.join(config.RUTA_DATOS, "ine"))
+_RUTA_CODIGOS_POSTALES = os.path.join(config.DATOS_DEL_PROGRAMA, "codigos_postales.csv")
+
+
+class EntradaMunicipios(BaseModel):
+    codigo_postal: str = ""
+    municipios: list[str]
+
+
+def _demografia(codigos, actualizar=False):
+    return mod_ine.agregar([_CLIENTE_INE.municipio(c, actualizar) for c in codigos])
+
+
+def _aplicar_a_sesiones(conf):
+    with _CANDADO:
+        sesiones = list(SESIONES.values())
+    for sesion in sesiones:
+        sesion.poner_biblioteca(conf["biblioteca"])
+
+
+def _fijar_habitantes(biblioteca, datos):
+    total = datos["padron"]["total"]
+    if biblioteca.get("poblacion") == total and biblioteca.get("poblacion_origen") == "ine":
+        return biblioteca
+    conf = CONFIG.guardar_biblioteca(poblacion=total, poblacion_origen="ine")
+    _aplicar_a_sesiones(conf)
+    return conf["biblioteca"]
+
+
+def _actualizar_habitantes():
+    """Al cargar el fondo, en segundo plano: el análisis no espera al INE, y sin
+    conexión se queda la última cifra."""
+    biblioteca = CONFIG.leer()["biblioteca"]
+    codigos = biblioteca.get("municipios") or []
+    if not codigos:
+        return
+    try:
+        _fijar_habitantes(biblioteca, _demografia(codigos))
+    except mod_ine.ErrorINE:
+        pass
+
+
+@app.get("/api/ine/cp/{codigo_postal}")
+def api_ine_codigo_postal(codigo_postal: str):
+    """Municipios de un código postal, para elegir los que atiende la biblioteca."""
+    try:
+        municipios = mod_ine.municipios_de_cp(codigo_postal, _RUTA_CODIGOS_POSTALES)
+    except mod_ine.CodigoNoValido as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except OSError:
+        raise HTTPException(status_code=500, detail="Falta la tabla de códigos postales.")
+    return {"codigo_postal": codigo_postal.strip(), "municipios": municipios}
+
+
+@app.get("/api/ine/poblacion")
+def api_ine_poblacion(actualizar: bool = False):
+    """Demografía de los municipios configurados. Con municipios, los
+    habitantes son siempre los del Padrón: si el INE publica una cifra nueva,
+    se actualizan solos."""
+    biblioteca = CONFIG.leer()["biblioteca"]
+    codigos = biblioteca.get("municipios") or []
+    if not codigos:
+        return {"configurado": False, "biblioteca": biblioteca}
+    try:
+        datos = _demografia(codigos, actualizar)
+    except mod_ine.ErrorINE as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    biblioteca = _fijar_habitantes(biblioteca, datos)
+    return {"configurado": True, "biblioteca": biblioteca, "datos": datos}
+
+
+@app.get("/api/sesion/{token}/pautas")
+def api_pautas(token: str):
+    """La colección frente a las pautas oficiales (IFLA, Ministerio, Diputació)."""
+    sesion = obtener_sesion(token)
+    resultado = mod_pautas.comparar(sesion.registros, sesion.poblacion)
+    # El euskera no es una pauta, pero es la referencia local de cuánto debería pesar:
+    # si no hay dato o el INE no responde, la pantalla sigue sin esa tarjeta.
+    resultado["euskera"] = None
+    codigos = CONFIG.leer()["biblioteca"].get("municipios") or []
+    if codigos:
+        try:
+            resultado["euskera"] = _cotejo_de(sesion, codigos)["euskera"]
+        except mod_ine.ErrorINE:
+            pass
+    return resultado
+
+
+@app.get("/api/sesion/{token}/poblacion/cotejo")
+def api_ine_cotejo(token: str):
+    """La población de los municipios configurados frente al fondo cargado."""
+    sesion = obtener_sesion(token)
+    codigos = CONFIG.leer()["biblioteca"].get("municipios") or []
+    if not codigos:
+        return {"configurado": False}
+    try:
+        datos = _demografia(codigos)
+    except mod_ine.ErrorINE as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    euskera = mod_ine.tabla_euskera(os.path.join(config.DATOS_DEL_PROGRAMA, "euskera_navarra.csv"))
+    return {"configurado": True, **mod_ine.cotejar(sesion.registros, datos, euskera)}
+
+
+def _cotejo_de(sesion, codigos):
+    euskera = mod_ine.tabla_euskera(os.path.join(config.DATOS_DEL_PROGRAMA, "euskera_navarra.csv"))
+    return mod_ine.cotejar(sesion.registros, _demografia(codigos), euskera)
+
+
+@app.post("/api/ine/biblioteca")
+def api_ine_guardar(entrada: EntradaMunicipios, x_admin: str = Header(None)):
+    """Fija los municipios de la biblioteca y toma sus habitantes del Padrón.
+    Primero se descarga: si el INE falla, la configuración no cambia."""
+    _exigir_admin(x_admin)
+    try:
+        codigos = mod_ine.validar_municipios(entrada.municipios)
+        if not codigos:
+            raise mod_ine.CodigoNoValido("Elige al menos un municipio.")
+        datos = _demografia(codigos)
+    except mod_ine.CodigoNoValido as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except mod_ine.ErrorINE as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    conf = CONFIG.guardar_biblioteca(codigo_postal=entrada.codigo_postal.strip() or None,
+                                     municipios=codigos, poblacion=datos["padron"]["total"],
+                                     poblacion_origen="ine")
+    _aplicar_a_sesiones(conf)
+    return {"configurado": True, "biblioteca": conf["biblioteca"], "datos": datos, "configuracion": conf}
+
+
+@app.delete("/api/ine/biblioteca")
+def api_ine_quitar(x_admin: str = Header(None)):
+    """Deja de usar el INE, para escribir los habitantes a mano (p. ej., una
+    biblioteca que atiende solo a un barrio). La última cifra se conserva."""
+    _exigir_admin(x_admin)
+    conf = CONFIG.guardar_biblioteca(codigo_postal=None, municipios=[], poblacion_origen="manual")
+    _aplicar_a_sesiones(conf)
+    return {"configuracion": conf}
+
+
 @app.post("/api/abrir-ultima")
 def api_abrir_ultima():
     ultima = _ultima_carga()

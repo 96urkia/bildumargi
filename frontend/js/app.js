@@ -659,9 +659,11 @@ function seccionesPosibles() {
   const secciones = [
     { clave: "diagnostico", etiqueta: "nav_diagnostico" },
     { clave: "secciones", etiqueta: "nav_secciones" },
-    { clave: "series", etiqueta: "nav_series" },
-    // La sección entera desaparece sin DILVE: sin él no hay nada que sugerir.
+    { clave: "pautas", etiqueta: "nav_pautas" },
+    { clave: "poblacion", etiqueta: "nav_poblacion" },
+    // Autores y Novedades necesitan DILVE; Series, no.
     { clave: "compras", etiqueta: "nav_compras", requiere: fuentesCompra().length > 0 },
+    { clave: "series", etiqueta: "nav_series" },
     // El seguimiento necesita que se guarde el historial de cargas.
     { clave: "seguimiento", etiqueta: "nav_seguimiento", requiere: Boolean(conf().historial) },
   ];
@@ -686,40 +688,81 @@ function seccionesDisponibles() {
   return visibles.length ? visibles : disponibles;
 }
 
-// Menú lateral. «Sugerencias de compra» despliega sus fuentes como submenú:
-// al elegir una, el panel de arriba (indicadores, matriz y demanda) no cambia;
-// solo cambia la lista de abajo.
+// Estructura del menú: tres apartados, con subsecciones. Las claves de vista no
+// cambian: Autores y Novedades son las dos fuentes de la vista «compras».
+function estructuraMenu() {
+  const visibles = new Set(seccionesDisponibles().map((s) => s.clave));
+  const hoja = (vista, etiqueta, extra = {}) => (visibles.has(vista) ? [{ vista, etiqueta, ...extra }] : []);
+  const compra = (clave) => (fuentesCompra().find((f) => f.clave === clave)
+    ? hoja("compras", `fuente_${clave}`, { fuente: clave }) : []);
+  const apartados = [
+    { etiqueta: "nav_grupo_analisis", hojas: [
+      ...hoja("diagnostico", "nav_diagnostico"),
+      ...hoja("secciones", "nav_secciones"),
+      ...hoja("pautas", "nav_pautas"),
+      ...hoja("poblacion", "nav_poblacion"),
+    ] },
+    { etiqueta: "nav_compras", hojas: [...compra("autores"), ...hoja("series", "nav_series"), ...compra("novedades")] },
+    { etiqueta: "nav_seguimiento", hojas: hoja("seguimiento", "nav_seguimiento"), sinSubmenu: true },
+  ];
+  return apartados.filter((a) => a.hojas.length);
+}
+
+function irAHoja(h) {
+  if (h.fuente) estado.controles.compras.fuente = h.fuente;
+  mostrarVista(h.vista);
+}
+
+function hojaActiva(h) {
+  if (estado.vista !== h.vista) return false;
+  if (h.fuente) return estado.controles.compras.fuente === h.fuente;
+  return true;
+}
+
+function botonHoja(h) {
+  const b = crear("button", hojaActiva(h) ? "activo" : "", t(h.etiqueta));
+  b.type = "button";
+  b.title = t(h.etiqueta);
+  if (hojaActiva(h)) b.setAttribute("aria-current", "page");
+  b.addEventListener("click", () => irAHoja(h));
+  return b;
+}
+
+// Menú lateral: cada apartado despliega sus subsecciones cuando se está en él.
+// Plegado o en pantalla estrecha no cabe el submenú, y se ven todas seguidas.
 function pintarNavegador() {
   const nav = $("#navegador");
   nav.innerHTML = "";
   const lista = crear("ul", "menu-lateral");
-  for (const seccion of seccionesDisponibles()) {
-    const item = crear("li");
-    const actual = estado.vista === seccion.clave;
-    const boton = crear("button", actual ? "activo" : "", t(seccion.etiqueta));
-    boton.type = "button";
-    if (actual) boton.setAttribute("aria-current", "page");
-    boton.addEventListener("click", () => mostrarVista(seccion.clave));
-    item.appendChild(boton);
-    if (seccion.clave === "compras" && actual) {
-      const fuentes = fuentesCompra();
-      if (fuentes.length > 1) {
+  const apartados = estructuraMenu();
+  const plano = estado.menuPlegado || window.matchMedia("(max-width: 900px)").matches;
+  if (plano) {
+    apartados.flatMap((a) => a.hojas).forEach((h) => {
+      const item = crear("li");
+      item.appendChild(botonHoja(h));
+      lista.appendChild(item);
+    });
+  } else {
+    apartados.forEach((a) => {
+      const item = crear("li");
+      const dentro = a.hojas.some((h) => h.vista === estado.vista && (!h.fuente || hojaActiva(h)))
+        || (estado.vista === "compras" && a.etiqueta === "nav_compras");
+      const boton = crear("button", dentro ? "activo" : "", t(a.etiqueta));
+      boton.type = "button";
+      if (dentro) boton.setAttribute("aria-current", "true");
+      boton.addEventListener("click", () => irAHoja(a.hojas[0]));
+      item.appendChild(boton);
+      if (dentro && !a.sinSubmenu) {
         const sub = crear("ul", "submenu");
-        fuentes.forEach((f) => {
+        a.hojas.forEach((h) => {
           const li = crear("li");
-          const b = crear("button", estado.controles.compras.fuente === f.clave ? "activo" : "", t(f.etiqueta));
-          b.type = "button";
-          b.addEventListener("click", () => {
-            estado.controles.compras.fuente = f.clave;
-            mostrarVista("compras");
-          });
-          li.appendChild(b);
+          li.appendChild(botonHoja(h));
           sub.appendChild(li);
         });
         item.appendChild(sub);
       }
-    }
-    lista.appendChild(item);
+      lista.appendChild(item);
+    });
   }
   nav.appendChild(lista);
   const plegar = crear("button", "plegar-menu", estado.menuPlegado ? "»" : "«");
@@ -743,13 +786,14 @@ async function mostrarVista(clave) {
   // Todas las pestañas son paneles de una sola pantalla: el documento deja de
   // crecer y la vista se ajusta al alto de la ventana (ver .modo-panel en el
   // CSS). Así cabecera, márgenes y menú quedan en el mismo sitio en todas.
-  document.body.classList.toggle("modo-panel", ["diagnostico", "secciones", "series", "compras", "seguimiento"].includes(clave));
+  document.body.classList.toggle("modo-panel", ["diagnostico", "secciones", "pautas", "series", "compras", "poblacion", "seguimiento"].includes(clave));
+  document.body.classList.toggle("pantalla-unica", clave === "poblacion" || clave === "pautas");
   const vista = $("#vista");
   cargando(vista);
   try {
     const pintores = {
       diagnostico: vistaDiagnostico, secciones: vistaSecciones, series: vistaSeries, compras: vistaCompras,
-      seguimiento: vistaSeguimiento,
+      seguimiento: vistaSeguimiento, poblacion: vistaPoblacion, pautas: vistaPautas,
     };
     await (pintores[clave] || vistaDiagnostico)(vista);
   } catch (e) {
@@ -3297,8 +3341,28 @@ function formularioConfiguracion(inicial) {
   red.addEventListener("input", () => { b.red = red.value; });
   campoRed.append(crear("span", "rotulo-campo", t("config_red")), red);
   filaBib.appendChild(campoRed);
-  filaBib.appendChild(entradaNumero(t("config_poblacion"), b.poblacion ?? "",
-    (v) => { b.poblacion = v; }, { min: 0, max: 50000000 }));
+  const conINE = (b.municipios || []).length > 0;
+  const campoHabitantes = entradaNumero(t(conINE ? "config_poblacion_ine" : "config_poblacion"), b.poblacion ?? "",
+    (v) => { b.poblacion = v; }, { min: 0, max: 50000000 });
+  if (conINE) {
+    campoHabitantes.querySelector("input").disabled = true;
+    const quitar = crear("button", "enlace-discreto", t("config_quitar_ine"));
+    quitar.type = "button";
+    quitar.title = t("config_quitar_ine_ayuda");
+    quitar.addEventListener("click", async () => {
+      try {
+        await API.ineQuitar(estado.tokenAdmin);
+        b.municipios = [];
+        b.codigo_postal = null;
+        b.poblacion_origen = "manual";
+        campoHabitantes.querySelector("input").disabled = false;
+        campoHabitantes.querySelector("label").textContent = t("config_poblacion");
+        quitar.remove();
+      } catch (e) { quitar.after(aviso("error", e.message)); }
+    });
+    campoHabitantes.appendChild(quitar);
+  }
+  filaBib.appendChild(campoHabitantes);
   filaBib.appendChild(entradaNumero(t("config_metros"), b.metros ?? "",
     (v) => { b.metros = v; }, { min: 0, max: 1000000 }));
   fsBib.appendChild(filaBib);
@@ -3634,6 +3698,588 @@ async function aplicarConfiguracion() {
     const visiblesAhora = seccionesDisponibles().map((x) => x.clave);
     mostrarVista(visiblesAhora.includes(estado.vista) ? estado.vista : vistaInicial());
   }
+}
+
+/* ==========================================================================
+   Pautas: la colección frente a las pautas oficiales (backend/pautas.py). Las
+   flechas dicen arriba o abajo, sin valorar: cada pauta admite adaptarse a la
+   biblioteca, y la pantalla no dice qué hay que hacer.
+   ========================================================================== */
+async function vistaPautas(vista) {
+  soltarMedidores();
+  const d = await API.pautas(estado.sesion);
+  vista.innerHTML = "";
+  const raiz = crear("div", "panel-pautas");
+  vista.appendChild(raiz);
+  const bloque = (fuente) => d.bloques.find((b) => b.fuente === fuente);
+  const fila = (fuente, clave) => (bloque(fuente).filas.find((f) => f.clave === clave));
+
+  // Arriba: el tamaño del fondo, con la banda de la pauta y tu cifra encima
+  const tarjetas = crear("div", "pautas-tarjetas");
+  const tarjeta = (f, fuente, decimales) => {
+    if (!f) return;
+    const escala = Math.max((f.max ?? f.min) * 1.5, f.valor * 1.12, 1);
+    const techo = f.max ?? f.min;
+    const formato = (n) => (decimales ? decimal(n, decimales) : miles(n));
+    const referencia = f.max === null ? `≥ ${formato(f.min)}` : f.min === f.max ? formato(f.min) : `${formato(f.min)}–${formato(f.max)}`;
+    tarjetas.appendChild(tarjetaIndicador({
+      rotulo: t(`pauta_${f.clave}`), valor: formato(f.valor), acento: PALETA.violeta,
+      estado: { nivel: f.posicion === "dentro" ? "ok" : f.posicion === "encima" ? "alto" : "aviso",
+        texto: t(f.posicion === "dentro" ? "ref_dentro" : f.posicion === "encima" ? "ref_encima" : "ref_debajo") },
+      grafico: graficoBala({ valor: f.valor, escala, referencia: [f.min, techo],
+        bandas: [[0, f.min], [f.min, f.max === null ? escala : techo], [f.max === null ? escala : techo, escala]], color: PALETA.texto }),
+      contexto: t("pautas_tarjeta_ctx", { r: referencia, f: t(`pautas_fuente_${fuente}`) }),
+    }));
+  };
+  tarjeta(fila("ifla", "libros_hab"), "ifla", 2);
+  tarjeta(fila("ministerio", "docs_hab"), "ministerio", 2);
+  tarjeta(fila("ifla", "fondo_minimo"), "ifla", 0);
+  tarjeta(fila("ministerio", "coleccion_inicial"), "ministerio", 0);
+  if (d.euskera) {
+    // Peso del euskera en el fondo frente a quienes lo conocen en el municipio (Nastat)
+    const e = d.euskera;
+    const enFondo = d.total ? Math.round((1000 * e.documentos) / d.total) / 10 : 0;
+    const posicion = enFondo > e.pct_alguno ? "encima" : enFondo < e.pct_alguno ? "debajo" : "dentro";
+    tarjetas.appendChild(tarjetaIndicador({
+      rotulo: t("pauta_euskera"), valor: `${decimal(enFondo, 1)} %`, acento: PALETA.violeta,
+      estado: { nivel: posicion === "dentro" ? "ok" : posicion === "encima" ? "alto" : "aviso",
+        texto: t(posicion === "dentro" ? "ref_dentro" : posicion === "encima" ? "ref_encima" : "ref_debajo") },
+      grafico: graficoBala({ valor: enFondo, escala: Math.max(enFondo * 1.2, e.pct_alguno * 1.5, 1), referencia: [e.pct_alguno, e.pct_alguno], bandas: [], color: PALETA.texto }),
+      contexto: t("pautas_euskera_ctx", { p: decimal(e.pct_alguno, 1), a: e.anio }),
+      ayuda: t("ine_euskera_fuente", { a: e.anio }),
+    }));
+    tarjetas.classList.add("con-euskera");
+  }
+  raiz.appendChild(tarjetas);
+
+  const rejilla = crear("div", "rejilla-poblacion rejilla-pautas");
+  raiz.appendChild(rejilla);
+  const huecoIzq = crear("div", "hueco");
+  const huecoDer = crear("div", "hueco");
+  rejilla.append(huecoIzq, huecoDer);
+
+  // Composición: la barra de la pauta encima de la tuya, con los mismos colores
+  const cuerpoIzq = cuadroPanel(huecoIzq, t("pautas_composicion"), t("pautas_composicion_sub"));
+  const comparaciones = [
+    ["ifla", ["ninos", "ficcion_adultos", "no_ficcion_adultos"]],
+    ["ministerio", ["adultos", "infantil_juvenil", "audiovisuales"]],
+    ["diputacio", ["general", "infantil"]],
+    ["diputacio", ["libros", "cd", "dvd"]],
+    ["diputacio", ["ficcion", "no_ficcion"]],
+  ];
+  comparaciones.forEach(([fuente, claves]) => {
+    const filas = claves.map((c) => fila(fuente, c));
+    const grupo = crear("div", "pautas-comparacion");
+    const cabeza = crear("div", "pautas-comparacion-cabeza");
+    const rotuloFuente = crear("span", "pautas-fuente", t(`pautas_fuente_${fuente}`));
+    if (fuente === "ifla") rotuloFuente.title = t("pautas_ifla_similares");
+    cabeza.appendChild(rotuloFuente);
+    filas.forEach((f, i) => {
+      const pieza = crear("span", "pautas-leyenda", t(`pauta_${f.clave}`));
+      const muestra = crear("i");
+      muestra.style.background = colorSerie(i);
+      pieza.prepend(muestra);
+      cabeza.appendChild(pieza);
+    });
+    grupo.appendChild(cabeza);
+    [["min", "pautas_barra_pauta"], ["valor", "pautas_barra_tu"]].forEach(([campo, rotulo]) => {
+      const linea = crear("div", "pautas-barra-fila");
+      linea.appendChild(crear("span", "pautas-barra-rotulo", t(rotulo)));
+      const barra = crear("div", "pautas-apilada");
+      filas.forEach((f, i) => {
+        const v = f[campo] || 0;
+        const similar = campo === "min" && fuente === "ifla";    // la IFLA no da cifra: «porcentajes similares»
+        const tramo = crear("div", "pautas-tramo", similar ? "≈ ⅓" : v >= 7 ? `${decimal(v, 0)} %` : "");
+        tramo.style.width = `${v}%`;
+        tramo.style.background = colorSerie(i);
+        tramo.title = similar ? t("pautas_ifla_similares") : `${t(`pauta_${f.clave}`)}: ${decimal(v, Number.isInteger(v) ? 0 : 1)} %`;
+        barra.appendChild(tramo);
+      });
+      linea.appendChild(barra);
+      grupo.appendChild(linea);
+    });
+    cuerpoIzq.appendChild(grupo);
+  });
+
+  // Secciones: cuánto te separas de cada pauta
+  const otros = d.secciones.find((x) => x.clave === "otros");
+  const cuerpoDer = cuadroPanel(huecoDer, t("pautas_secciones"), t("pautas_secciones_sub"),
+    ayudaDesplegable(t("ine_fuentes"), [t("pautas_ayuda_fuentes"), t("pautas_ayuda_lectura"), t("pautas_ayuda_no_calculable")], "ayuda-larga"));
+  const huecoGrafico = crear("div", "pautas-grafico");
+  cuerpoDer.appendChild(huecoGrafico);
+  cuerpoDer.appendChild(crear("p", "ine-nota", t("pautas_sin_equivalencia", { p: decimal(otros.ministerio.valor || 0, 1) })));
+  const dibujar = () => {
+    if (!huecoGrafico.clientWidth) return;
+    huecoGrafico.replaceChildren(graficoDiferencias(d.secciones.filter((x) => x.clave !== "otros"), huecoGrafico.clientWidth, huecoGrafico.clientHeight));
+  };
+  dibujar();
+  const observador = new ResizeObserver(dibujar);
+  observador.observe(huecoGrafico);
+  MEDIDORES.add(observador);
+}
+
+// Diferencia con una pauta, en puntos: 0 si está dentro de su intervalo.
+function diferenciaPauta(v) {
+  if (v.valor === null || v.valor === undefined) return null;
+  if (v.valor < v.min) return v.valor - v.min;
+  return v.valor > v.max ? v.valor - v.max : 0;
+}
+
+// Dos columnas de barras divergentes desde 0, con la misma escala: a la derecha,
+// más peso que en la pauta; a la izquierda, menos. Mismo gesto que el uso relativo.
+function graficoDiferencias(secciones, ancho, alto) {
+  const cabecera = 34, n = secciones.length;
+  const altoFila = Math.min(34, (alto - cabecera - 2) / n);
+  const svg = lienzo(ancho, Math.min(alto, cabecera + n * altoFila + 2), t("pautas_secciones"));
+  svg.classList.add("rendimiento");
+  const anchoEtiqueta = Math.min(190, Math.max(120, ancho * .3));
+  const anchoCol = (ancho - anchoEtiqueta - 12) / 2;
+  const maximo = Math.max(3, ...secciones.flatMap((x) => [x.ministerio, x.diputacio].map((v) => Math.abs(diferenciaPauta(v) || 0))));
+  const columnas = [["ministerio", anchoEtiqueta + 4, "pautas_col_ministerio"], ["diputacio", anchoEtiqueta + 8 + anchoCol, "pautas_col_diputacio"]];
+  const margenValor = 34;                  // sitio para la cifra a cada lado de la barra
+  columnas.forEach(([clave, x0, rotulo]) => {
+    const cero = x0 + anchoCol / 2;
+    svg.appendChild(svgEl("text", { x: cero, y: 12, "text-anchor": "middle", class: "rotulo-columna fuerte" }, t(rotulo)));
+    svg.appendChild(svgEl("text", { x: x0 + 2, y: 26, class: "rotulo-columna" }, `◄ ${t("pautas_menos")}`));
+    svg.appendChild(svgEl("text", { x: x0 + anchoCol - 2, y: 26, "text-anchor": "end", class: "rotulo-columna" }, `${t("pautas_mas")} ►`));
+    svg.appendChild(svgEl("line", { x1: cero, x2: cero, y1: cabecera - 3, y2: cabecera + n * altoFila, class: "linea-referencia" }));
+    const media = anchoCol / 2 - margenValor;
+    const grosor = Math.min(14, altoFila - 7);
+    secciones.forEach((f, i) => {
+      const v = f[clave];
+      const dif = diferenciaPauta(v);
+      const medio = cabecera + i * altoFila + altoFila / 2;
+      const g = svgEl("g", {});
+      const referencia = v.min === v.max ? `${decimal(v.min, Number.isInteger(v.min) ? 0 : 1)} %` : `${v.min}–${v.max} %`;
+      g.appendChild(svgEl("title", {}, `${t(`pauta_sec_${f.clave}`)} · ${t(rotulo)}: ${referencia} · ${t("pautas_barra_tu")}: ${decimal(v.valor, 1)} %`));
+      g.appendChild(svgEl("rect", { x: x0, y: medio - altoFila / 2, width: anchoCol, height: altoFila, fill: "transparent" }));
+      if (dif === 0 || Math.abs(dif) < 0.05) {
+        g.appendChild(svgEl("text", { x: cero + 5, y: medio + 4, class: "valor-mono tenue" }, "="));
+      } else {
+        const largo = Math.max(2, (Math.abs(dif) / maximo) * media);
+        const derecha = dif > 0;
+        g.appendChild(svgEl("rect", { x: derecha ? cero : cero - largo, y: medio - grosor / 2, width: largo, height: grosor, rx: 2,
+          class: `barra-uso ${derecha ? "encima" : "debajo"}` }));
+        g.appendChild(svgEl("text", { x: derecha ? cero + largo + 4 : cero - largo - 4, y: medio + 4, "text-anchor": derecha ? "start" : "end", class: "valor-mono" },
+          `${derecha ? "+" : "−"}${numeroDecimal(Math.abs(dif), 1)}`));
+      }
+      svg.appendChild(g);
+    });
+  });
+  secciones.forEach((f, i) => {
+    const medio = cabecera + i * altoFila + altoFila / 2;
+    svg.appendChild(svgEl("text", { x: 4, y: medio + 4, class: "etiqueta-fila" }, t(`pauta_sec_${f.clave}`)));
+  });
+  return svg;
+}
+
+/* ==========================================================================
+   Población: habitantes y demografía del municipio, desde el INE. Basta con
+   el código postal; lo demás lo descarga el servidor (backend/ine.py).
+   ========================================================================== */
+async function vistaPoblacion(vista) {
+  soltarMedidores();
+  const r = await API.inePoblacion();
+  pintarPoblacion(vista, r);
+}
+
+function pintarPoblacion(vista, r) {
+  soltarMedidores();
+  vista.innerHTML = "";
+  const raiz = crear("div", "panel-poblacion");
+  vista.appendChild(raiz);
+  const barra = crear("div", "ine-barra");
+  raiz.appendChild(barra);
+  barra.appendChild(formularioCodigoPostal(vista, r));
+  if (r.configurado) pintarDemografia(raiz, barra, vista, r);
+}
+
+function formularioCodigoPostal(vista, r) {
+  const b = r.biblioteca || {};
+  const cuerpo = crear("div", "ine-formulario");
+  const fila = crear("form", "ine-fila");
+  const campo = crear("label", "campo estrecho");
+  const entrada = crear("input");
+  entrada.inputMode = "numeric";
+  entrada.maxLength = 5;
+  entrada.placeholder = "31522";
+  entrada.value = b.codigo_postal || "";
+  campo.append(crear("span", "rotulo-campo", t("ine_cp")), entrada);
+  const buscar = crear("button", "boton secundario pequeno", t("ine_buscar"));
+  buscar.type = "submit";
+  fila.append(campo, buscar);
+  cuerpo.appendChild(fila);
+  if (!r.configurado) cuerpo.appendChild(crear("p", "ayuda-config", t("ine_ayuda")));
+  const resultado = crear("div", "ine-resultado");
+  cuerpo.appendChild(resultado);
+  fila.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    resultado.innerHTML = "";
+    try {
+      const { municipios } = await API.ineCodigoPostal(entrada.value);
+      if (!municipios.length) { resultado.appendChild(aviso("atencion", t("ine_cp_desconocido"))); return; }
+      pintarEleccionMunicipios(vista, resultado, entrada.value.trim(), municipios, b.municipios || []);
+    } catch (err) {
+      resultado.appendChild(aviso("error", err.message));
+    }
+  });
+  return cuerpo;
+}
+
+function pintarEleccionMunicipios(vista, resultado, cp, municipios, actuales) {
+  // Con un solo municipio no hay nada que decidir; con varios, decide quien
+  // conoce la biblioteca: el código postal no dice a cuáles atiende.
+  const elegidos = new Set(municipios.length === 1 ? [municipios[0].codigo]
+    : municipios.filter((m) => actuales.includes(m.codigo)).map((m) => m.codigo));
+  if (municipios.length > 1) resultado.appendChild(crear("p", "ayuda-config", t("ine_varios", { n: municipios.length })));
+  const lista = crear("div", "ine-municipios");
+  municipios.forEach((m) => lista.appendChild(casilla(`${m.nombre} (${m.codigo})`, elegidos.has(m.codigo), (si) => {
+    if (si) elegidos.add(m.codigo); else elegidos.delete(m.codigo);
+  })));
+  resultado.appendChild(lista);
+  const usar = crear("button", "boton pequeno", t("ine_usar"));
+  usar.type = "button";
+  const mensaje = crear("div");
+  usar.addEventListener("click", async () => {
+    mensaje.innerHTML = "";
+    if (!elegidos.size) { mensaje.appendChild(aviso("atencion", t("ine_elige"))); return; }
+    usar.disabled = true;
+    usar.textContent = t("ine_descargando");
+    try {
+      const r = await API.ineGuardar(estado.tokenAdmin, cp, [...elegidos]);
+      estado.config.configuracion = r.configuracion;
+      await aplicarConfiguracionPoblacion();
+      pintarPoblacion(vista, r);
+    } catch (err) {
+      usar.disabled = false;
+      usar.textContent = t("ine_usar");
+      mensaje.appendChild(aviso("error", err.message));
+    }
+  });
+  resultado.append(usar, mensaje);
+}
+
+// Los habitantes han cambiado: la cabecera y el diagnóstico se recalculan.
+async function aplicarConfiguracionPoblacion() {
+  try {
+    const m = await API.metricas(estado.sesion);
+    estado.biblioteca = m.biblioteca;
+    estado.metricas = m.metricas;
+    if (estado.identidad) pintarIdentidad({ ...estado.identidad, biblioteca: m.biblioteca, metricas: m.metricas });
+  } catch { /* la sesión ha caducado: se verá al volver a cargar */ }
+}
+
+function pintarDemografia(raiz, barra, vista, r) {
+  const d = r.datos, p = d.padron, c = d.censo;
+  const pct = (v) => (v === null || v === undefined ? "—" : `${decimal(v, 1)} %`);
+
+  // Barra: código postal · municipio · fecha · actualizar · fuentes
+  barra.appendChild(crear("h2", null, d.municipios.map((m) => m.nombre).join(" + ")));
+  barra.appendChild(crear("span", "contexto-ine", t("ine_descargado", { f: fechaCorta(d.descargado) })));
+  const refrescar = crear("button", "enlace-discreto", t("ine_actualizar"));
+  refrescar.type = "button";
+  barra.appendChild(refrescar);
+  barra.appendChild(ayudaDesplegable(t("ine_fuentes"), [
+    t("ine_nota_fuentes", { p: miles(p.total), pa: p.anio, c: miles(c.total), ca: c.anio }),
+    t("ine_nota_municipal"), t("ine_nota_otros"), t("ine_cotejo_edad_nota"), t("ine_cotejo_lengua_nota"), t("ine_euskera_nota")], "ayuda-larga"));
+  const avisos = [...d.avisos];
+  if (d.sin_conexion) avisos.unshift(t("ine_sin_conexion", { f: fechaCorta(d.descargado) }));
+  if (avisos.length) {
+    const nota = crear("span", "ine-aviso", avisos.join(" · "));
+    nota.title = avisos.join("\n");
+    barra.appendChild(nota);
+  }
+  refrescar.addEventListener("click", async () => {
+    refrescar.disabled = true;
+    try { pintarPoblacion(vista, await API.inePoblacion(true)); } catch (err) {
+      refrescar.disabled = false;
+      const nota = crear("span", "ine-aviso", err.message);
+      barra.appendChild(nota);
+    }
+  });
+
+  // Fila superior: habitantes con su evolución y los indicadores
+  const fila = crear("div", "ine-indicadores");
+  const primero = p.serie[0];
+  const cambio = primero && p.serie.length > 1 ? p.total - primero.valor : null;
+  const signo = (n) => `${n > 0 ? "+" : n < 0 ? "−" : "±"}${miles(Math.abs(n))}`;
+  const habitantes = tarjetaIndicador({ rotulo: t("ine_habitantes"), valor: miles(p.total),
+    contexto: cambio === null ? t("ine_padron_anio", { a: p.anio })
+      : t("ine_padron_cambio", { a: p.anio, d: signo(cambio), desde: primero.anio }), acento: PALETA.cian });
+  habitantes.classList.add("ine-habitantes");
+  const huecoLinea = crear("div", "ine-linea");
+  habitantes.appendChild(huecoLinea);
+  fila.append(habitantes,
+    tarjetaIndicador({ rotulo: t("ine_edad_media"), valor: c.edad_media === null ? "—" : decimal(c.edad_media, 1), unidad: ` ${t("ine_anios")}`,
+      contexto: t("ine_edad_media_ctx", { e: decimal(c.edad_media_espana, 1), x: decimal(c.edad_media_extranjero, 1) }) }),
+    tarjetaIndicador({ rotulo: t("ine_menores"), valor: pct(c.pct_menores_15), contexto: t("ine_personas", { n: miles(c.menores_15) }) }),
+    tarjetaIndicador({ rotulo: t("ine_mayores"), valor: pct(c.pct_mayores_65), contexto: t("ine_mayores_ctx", { n: miles(c.mayores_65), m: pct(c.pct_mayores_80) }) }),
+    tarjetaIndicador({ rotulo: t("ine_extranjera"), valor: pct(c.pct_extranjera), contexto: t("ine_extranjera_ctx", { n: miles(c.extranjera), m: pct(c.pct_nacidos_extranjero) }) }),
+  );
+  raiz.appendChild(fila);
+
+  // Cuatro gráficos, dos y dos: a la izquierda la edad, a la derecha la procedencia;
+  // arriba la población, abajo su cotejo con el fondo.
+  const rejilla = crear("div", "rejilla-poblacion rejilla-cuatro");
+  raiz.appendChild(rejilla);
+  const huecoPiramide = crear("div", "hueco");
+  const huecoPaises = crear("div", "hueco");
+  const huecoEdad = crear("div", "hueco");
+  const huecoLengua = crear("div", "hueco");
+  rejilla.append(huecoPiramide, huecoPaises, huecoEdad, huecoLengua);
+  const cuerpoPiramide = cuadroPanel(huecoPiramide, t("ine_piramide"), t("ine_censo_anio", { a: c.anio }));
+  const paises = unirPaises(c);
+  const columnasCSV = [
+    { clave: "nombre", titulo: t("ine_pais") }, { clave: "nacionalidad", titulo: t("ine_col_nacionalidad") },
+    { clave: "nacimiento", titulo: t("ine_col_nacimiento") },
+  ];
+  const cuerpoPaises = cuadroPanel(huecoPaises, t("ine_procedencias"), t("ine_censo_anio", { a: c.anio }),
+    paises.length ? botonCSV("poblacion_procedencias.csv", columnasCSV, paises) : null);
+  const leyendaEdad = crear("div", "ine-leyenda");
+  const cuerpoEdad = cuadroPanel(huecoEdad, t("ine_cotejo_edad"), t("ine_cotejo_edad_sub"), leyendaEdad);
+  const cuerpoLengua = cuadroPanel(huecoLengua, t("ine_cotejo_lengua"), t("ine_cotejo_lengua_sub"));
+  let cotejo = null;
+
+  // Todo se dibuja a la medida del hueco: al cambiar la ventana se vuelve a
+  // dibujar y nunca aparece una barra de desplazamiento.
+  const dibujar = () => {
+    if (!cuerpoPiramide.clientWidth) return;
+    huecoLinea.replaceChildren();
+    if (p.serie.length > 1 && huecoLinea.clientWidth > 40 && huecoLinea.clientHeight > 30) {
+      huecoLinea.appendChild(graficoEvolucion(p.serie.map((x) => ({ valor: x.valor, etiqueta: String(x.anio) })),
+        { ancho: huecoLinea.clientWidth, alto: huecoLinea.clientHeight, color: PALETA.cian, formato: miles, titulo: t("ine_evolucion") }));
+    }
+    cuerpoPiramide.replaceChildren(piramidePoblacion(c.edades, cuerpoPiramide.clientWidth, cuerpoPiramide.clientHeight));
+    pintarTablaPaises(cuerpoPaises, paises, c);
+    if (cotejo) pintarLenguas(cuerpoLengua, cotejo);
+  };
+  dibujar();
+  let pendiente = null;
+  const observador = new ResizeObserver(() => {
+    cancelAnimationFrame(pendiente);
+    pendiente = requestAnimationFrame(dibujar);
+  });
+  [huecoLinea, cuerpoPiramide, cuerpoPaises, cuerpoLengua].forEach((n) => observador.observe(n));
+  MEDIDORES.add(observador);
+
+  // El cotejo necesita el fondo: se pide aparte para no retrasar lo demás
+  cargando(cuerpoEdad);
+  cargando(cuerpoLengua);
+  API.ineCotejo(estado.sesion).then((datos) => {
+    if (!raiz.isConnected) return;
+    cotejo = datos;
+    pintarCotejoEdad(cuerpoEdad, datos, leyendaEdad);
+    pintarLenguas(cuerpoLengua, datos);
+  }).catch((err) => {
+    cuerpoEdad.replaceChildren(aviso("error", err.message));
+    cuerpoLengua.replaceChildren();
+  });
+}
+
+// Vecinos, fondo y prestados: tres columnas por público, sobre la misma escala
+function pintarCotejoEdad(cuerpo, c, leyenda) {
+  cuerpo.replaceChildren();
+  const nombre = { infantil: t("ine_publico_infantil"), juvenil: t("ine_publico_juvenil"), adultos: t("ine_publico_adultos") };
+  const series = [["pct_poblacion", "ine_serie_poblacion"], ["pct_fondo", "ine_serie_fondo"], ["pct_prestados", "ine_serie_prestados"]];
+  leyenda.replaceChildren();
+  series.forEach(([, rotulo], i) => {
+    const pieza = crear("span", null, t(rotulo));
+    const muestra = crear("i");
+    muestra.style.background = colorSerie(i);
+    pieza.prepend(muestra);
+    leyenda.appendChild(pieza);
+  });
+  const columnas = crear("div", "ine-columnas");
+  const maximo = Math.max(1, ...c.edades.flatMap((e) => series.map(([k]) => e[k] || 0)));
+  c.edades.forEach((e) => {
+    const grupo = crear("div", "ine-col-grupo");
+    const barras = crear("div", "ine-col-barras");
+    series.forEach(([clave, rotulo], i) => {
+      const col = crear("div", "ine-col");
+      col.title = `${nombre[e.clave]} · ${t(rotulo)}: ${decimal(e[clave] || 0, 1)} %`;
+      col.appendChild(crear("span", "ine-col-valor", `${decimal(e[clave] || 0, 0)} %`));
+      const barra = crear("div", "ine-col-barra");
+      barra.style.height = `${(100 * (e[clave] || 0)) / maximo * 0.86}%`;
+      barra.style.background = colorSerie(i);
+      col.appendChild(barra);
+      barras.appendChild(col);
+    });
+    const pie = crear("div", "ine-col-nombre", nombre[e.clave]);
+    pie.title = t("ine_docs_por_ctx", { d: miles(e.documentos), p: miles(e.personas) });
+    pie.appendChild(crear("small", null, t("ine_doc_persona", { n: e.docs_persona === null ? "—" : decimal(e.docs_persona, 1) })));
+    grupo.append(barras, pie);
+    columnas.appendChild(grupo);
+  });
+  cuerpo.appendChild(columnas);
+}
+
+function pintarLenguas(cuerpo, c) {
+  cuerpo.replaceChildren();
+  const fiable = c.cobertura_idioma >= 50;
+  if (!fiable) cuerpo.appendChild(crear("p", "ine-nota ine-alerta", t("ine_cobertura_baja", { p: decimal(c.cobertura_idioma, 1), n: miles(c.documentos_con_idioma) })));
+  const hueco = crear("div", "ine-lenguas");
+  cuerpo.appendChild(hueco);
+  if (c.otras_lenguas.length) {
+    cuerpo.appendChild(crear("p", "ine-nota", t("ine_otras_lenguas", { l: c.otras_lenguas.slice(0, 5).map((x) => `${x.lengua} (${miles(x.documentos)})`).join(", ") })));
+  }
+  if (!c.lenguas.length && !c.euskera) { hueco.appendChild(crear("p", "vacio", t("ine_sin_paises"))); return; }
+  if (c.euskera) cuerpo.appendChild(crear("p", "ine-nota", t("ine_euskera_fuente", { a: c.euskera.anio })));
+  hueco.appendChild(graficoLenguas(c, fiable, hueco.clientWidth, hueco.clientHeight));
+}
+
+// Mismo gráfico que el uso relativo: divergente desde 1,0. A la izquierda, la lengua
+// pesa menos en el fondo que entre los vecinos; a la derecha, más. El tope es 2,0
+// para que un caso extremo no aplaste a los demás; la cifra es siempre la real.
+function graficoLenguas(c, fiable, ancho, alto) {
+  const eus = c.euskera;
+  const hueco = eus ? 6 : 0;               // separa el euskera: se mide distinto
+  const cabecera = 22, altoMin = 21;
+  const capacidad = Math.max(3, Math.floor((alto - cabecera - hueco - 2) / altoMin) - (eus ? 1 : 0));
+  let filas = c.lenguas;
+  if (filas.length > capacidad) {
+    const resto = filas.slice(capacidad - 1);
+    const personas = resto.reduce((s, x) => s + x.personas, 0);
+    const documentos = resto.reduce((s, x) => s + x.documentos, 0);
+    filas = [...filas.slice(0, capacidad - 1), { lengua: t("ine_resto_lenguas", { n: resto.length }), personas, documentos,
+      paises: resto.map((x) => x.lengua),
+      indice: personas && c.total_fondo ? (documentos / c.total_fondo) / (personas / c.total_poblacion) : null }];
+  }
+  if (eus) {
+    filas = [{ ...eus, lengua: t("ine_euskera_conoce"), conoce: true,
+      paises: [t("ine_euskera_detalle", { v: decimal(eus.pct_vascohablante, 1), r: decimal(eus.pct_receptor, 1), a: eus.anio })] }, ...filas];
+  }
+  const altoFila = Math.min(34, (alto - cabecera - hueco - 2) / filas.length);
+  const svg = lienzo(ancho, Math.min(alto, cabecera + hueco + filas.length * altoFila + 2), t("ine_cotejo_lengua"));
+  svg.classList.add("rendimiento");
+  const xPersonas = Math.max(92, ancho * .26), xDocumentos = xPersonas + 56, x0 = xDocumentos + 18;
+  const anchoBarra = Math.max(60, ancho - x0 - 44), TOPE = 2;
+  const xValor = (v) => x0 + (Math.min(v, TOPE) / TOPE) * anchoBarra;
+  const xUno = xValor(1);
+  const rotulo = (x, texto, ancla = "start", clase = "rotulo-columna") => svg.appendChild(svgEl("text", { x, y: 14, "text-anchor": ancla, class: clase }, texto));
+  rotulo(4, t("ine_col_lengua"));
+  rotulo(xPersonas, t("ine_col_personas_corto"), "end");
+  rotulo(xDocumentos, t("ine_col_documentos_corto"), "end");
+  rotulo(xUno, numeroDecimal(1, 1), "middle", "rotulo-columna fuerte");
+  svg.appendChild(svgEl("line", { x1: xUno, x2: xUno, y1: cabecera - 4, y2: cabecera + hueco + filas.length * altoFila, class: "linea-referencia" }));
+  if (eus) svg.appendChild(svgEl("line", { x1: 0, x2: ancho, y1: cabecera + altoFila + hueco / 2, y2: cabecera + altoFila + hueco / 2, class: "separador-lenguas" }));
+  const grosor = Math.min(14, altoFila - 7);
+  filas.forEach((f, i) => {
+    const medio = cabecera + (eus && i > 0 ? hueco : 0) + i * altoFila + altoFila / 2;
+    const g = svgEl("g", {});
+    const titulo = svgEl("title", {}, `${f.paises.join(", ")}`);
+    g.appendChild(titulo);
+    const texto = f.lengua.length > 22 ? `${f.lengua.slice(0, 21)}…` : f.lengua;
+    g.appendChild(svgEl("text", { x: 4, y: medio + 4, class: "etiqueta-fila" }, texto));
+    g.appendChild(svgEl("text", { x: xPersonas, y: medio + 4, "text-anchor": "end", class: "valor-mono" }, miles(f.personas)));
+    const sinDato = !fiable && !f.documentos;     // 0 con el idioma casi sin conocer no es 0
+    g.appendChild(svgEl("text", { x: xDocumentos, y: medio + 4, "text-anchor": "end", class: "valor-mono" }, sinDato ? "?" : miles(f.documentos)));
+    if (!sinDato && f.indice !== null) {
+      const desde = Math.min(xUno, xValor(f.indice));
+      const pequena = (f.personas < 5 && !f.conoce) || !fiable;   // pocas personas o idioma casi sin conocer: orientativo
+      g.appendChild(svgEl("rect", { x: desde, y: medio - grosor / 2, height: grosor, rx: 2, width: Math.max(2, Math.abs(xValor(f.indice) - xUno)),
+        class: `barra-uso ${f.indice >= 1 ? "encima" : "debajo"}${pequena ? " pequena" : ""}` }));
+      g.appendChild(svgEl("text", { x: ancho - 2, y: medio + 4, "text-anchor": "end", class: "valor-mono" }, numeroDecimal(f.indice, 2)));
+    }
+    svg.appendChild(g);
+  });
+  return svg;
+}
+
+// Una fila por país, con sus dos cifras: nacionalidad y lugar de nacimiento.
+function unirPaises(c) {
+  const filas = new Map();
+  const poner = (lista, clave) => lista.forEach((x) => {
+    if (!filas.has(x.codigo)) filas.set(x.codigo, { nombre: x.nombre, nacionalidad: 0, nacimiento: 0 });
+    filas.get(x.codigo)[clave] = x.valor;
+  });
+  poner(c.paises_nacionalidad, "nacionalidad");
+  poner(c.paises_nacimiento, "nacimiento");
+  return [...filas.values()].sort((a, b) => (b.nacionalidad + b.nacimiento) - (a.nacionalidad + a.nacimiento)
+    || a.nombre.localeCompare(b.nombre));
+}
+
+// Caben tantas filas como permita el hueco. Lo que no cabe se suma en «Resto»,
+// con los países en el rótulo emergente y completos en el CSV: las cifras de
+// la tabla siempre cuadran con el total.
+function pintarTablaPaises(cuerpo, paises, c) {
+  cuerpo.replaceChildren();
+  if (!paises.length) { cuerpo.appendChild(crear("p", "vacio", t("ine_sin_paises"))); return; }
+  const construir = (caben) => {
+    const visibles = paises.length <= caben ? paises : paises.slice(0, Math.max(0, caben - 1));
+    const resto = paises.slice(visibles.length);
+    const tabla = crear("table", "datos ine-tabla");
+    const cabeza = crear("tr");
+    [t("ine_pais"), t("ine_col_nacionalidad"), "%", t("ine_col_nacimiento"), "%"].forEach((x, i) => {
+      cabeza.appendChild(crear("th", i ? "num" : null, x));
+    });
+    const thead = crear("thead");
+    thead.appendChild(cabeza);
+    const tbody = crear("tbody");
+    const fila = (nombre, a, n, clase, titulo) => {
+      const tr = crear("tr", clase);
+      if (titulo) tr.title = titulo;
+      const porc = (v) => (c.total ? decimal(100 * v / c.total, 1) : "—");
+      tr.appendChild(crear("td", null, nombre));
+      [miles(a), porc(a), miles(n), porc(n)].forEach((x) => tr.appendChild(crear("td", "num", x)));
+      tbody.appendChild(tr);
+    };
+    visibles.forEach((x) => fila(x.nombre, x.nacionalidad, x.nacimiento));
+    if (resto.length) {
+      fila(t("ine_resto", { n: resto.length }), resto.reduce((s, x) => s + x.nacionalidad, 0), resto.reduce((s, x) => s + x.nacimiento, 0),
+        "ine-resto", resto.map((x) => `${x.nombre}: ${miles(x.nacionalidad)} / ${miles(x.nacimiento)}`).join("\n"));
+    }
+    fila(t("ine_total_extranjero"), c.extranjera ?? 0, c.nacidos_extranjero ?? 0, "ine-total");
+    tabla.append(thead, tbody);
+    cuerpo.replaceChildren(tabla);
+    return tabla;
+  };
+  // Se mide de verdad: se dibuja una fila, se ve cuánto ocupa y se calcula cuántas caben.
+  const prueba = construir(1);
+  const altoFila = prueba.tBodies[0].rows[0].getBoundingClientRect().height || 21;
+  const altoCabeza = prueba.tHead.getBoundingClientRect().height;
+  const caben = Math.floor((cuerpo.clientHeight - altoCabeza - 2) / altoFila) - 1;   // menos la fila del total
+  construir(Math.max(1, caben));
+}
+
+// Pirámide: hombres a la izquierda, mujeres a la derecha, misma escala a ambos
+// lados (el mismo número mide lo mismo en las dos mitades). Ocupa el hueco dado.
+function piramidePoblacion(edades, ancho = 520, alto = 340) {
+  const tramos = edades.slice();
+  // Los dos últimos tramos suelen ser casi cero: se juntan para no ensuciar
+  const ultimos = tramos.splice(-2);
+  tramos.push({ tramo: "95+", hombres: ultimos[0].hombres + ultimos[1].hombres, mujeres: ultimos[0].mujeres + ultimos[1].mujeres });
+  const centro = 44, arriba = 16;
+  // Con poco alto no caben veinte filas legibles: se agrupan de diez en diez años
+  if ((alto - arriba) / tramos.length < 10.5) {
+    const decenas = [];
+    for (let i = 0; i < tramos.length - 1; i += 2) {
+      const [a, b] = [tramos[i], tramos[i + 1]];
+      const ultimo = i + 2 >= tramos.length - 1;
+      const resto = ultimo ? tramos.slice(i + 2) : [];
+      decenas.push({ tramo: ultimo ? `${i * 5}+` : `${i * 5}-${i * 5 + 9}`,
+        hombres: [a, b, ...resto].reduce((s2, x) => s2 + x.hombres, 0),
+        mujeres: [a, b, ...resto].reduce((s2, x) => s2 + x.mujeres, 0) });
+    }
+    tramos.splice(0, tramos.length, ...decenas);
+  }
+  const altoFila = Math.max(8, (alto - arriba) / tramos.length);
+  const grueso = Math.max(5, altoFila - 2.5);
+  const svg = lienzo(ancho, alto, t("ine_piramide"));
+  const maximo = Math.max(1, ...tramos.flatMap((x) => [x.hombres, x.mujeres]));
+  const media = ancho / 2, disponible = media - centro / 2 - 36;
+  const escala = (v) => (v / maximo) * disponible;
+  svg.appendChild(svgEl("text", { x: media - centro / 2, y: 11, "text-anchor": "end", class: "piramide-rotulo" }, t("ine_hombres")));
+  svg.appendChild(svgEl("text", { x: media + centro / 2, y: 11, class: "piramide-rotulo" }, t("ine_mujeres")));
+  tramos.slice().reverse().forEach((x, i) => {
+    const y = arriba + i * altoFila;
+    const h = escala(x.hombres), m = escala(x.mujeres), base = y + grueso / 2 + 3.5;
+    svg.appendChild(svgEl("rect", { x: media - centro / 2 - h, y, width: h, height: grueso, rx: 1.5, fill: colorSerie(0) }));
+    svg.appendChild(svgEl("rect", { x: media + centro / 2, y, width: m, height: grueso, rx: 1.5, fill: colorSerie(1) }));
+    svg.appendChild(svgEl("text", { x: media, y: base, "text-anchor": "middle", class: "piramide-tramo" }, x.tramo));
+    svg.appendChild(svgEl("text", { x: media - centro / 2 - h - 4, y: base, "text-anchor": "end", class: "piramide-valor" }, miles(x.hombres)));
+    svg.appendChild(svgEl("text", { x: media + centro / 2 + m + 4, y: base, class: "piramide-valor" }, miles(x.mujeres)));
+  });
+  return svg;
 }
 
 /* --- Editor de la tabla de signaturas (Configuración y Administración) -----

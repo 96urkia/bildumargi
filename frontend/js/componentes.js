@@ -1484,7 +1484,7 @@ function graficoEvolucion(puntos, { ancho, alto, color, formato, titulo }) {
   cerrarTramo();
   const salto = Math.max(1, Math.ceil(puntos.length / Math.max(2, Math.floor(w / 70))));
   puntos.forEach((p, i) => {
-    const fecha = new Date(p.fecha).toLocaleDateString(LOCALE_FECHAS[IDIOMA] || "es-ES", { day: "numeric", month: "short", year: "2-digit" });
+    const fecha = p.etiqueta || new Date(p.fecha).toLocaleDateString(LOCALE_FECHAS[IDIOMA] || "es-ES", { day: "numeric", month: "short", year: "2-digit" });
     if (p.valor !== null && p.valor !== undefined) {
       const c = svgEl("circle", { cx: X(i), cy: Y(p.valor), r: 3.5, fill: color });
       c.appendChild(svgEl("title", {}, `${fecha}: ${formato(p.valor)}`));

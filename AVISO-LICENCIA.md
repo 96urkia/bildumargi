@@ -79,3 +79,15 @@ El listado de la CDU incluido en `datos/` procede de la traducción al
 castellano de la Clasificación Decimal Universal de uso común en las
 bibliotecas públicas españolas, recogido aquí para dar nombre a los códigos
 numéricos.
+
+## Datos de terceros
+
+- `datos/codigos_postales.csv`: relación de códigos postales y municipios del
+  conjunto [ds-codigos-postales-ine-es](https://github.com/inigoflores/ds-codigos-postales-ine-es)
+  (licencia ODC-PDDL, edición de enero de 2026), elaborado a partir del Callejero
+  del Censo Electoral del INE. Se han quitado los códigos de provincia imposibles.
+- Población y demografía: API JSON del Instituto Nacional de Estadística (INE).
+- `datos/euskera_navarra.csv`: Instituto de Estadística de Navarra (Nastat),
+  *Estadística de población según conocimiento de euskera*, año 2022 (nota publicada
+  el 17 de mayo de 2024), tabla municipal exportada de su informe:
+  <https://nastat.navarra.es/tablas_powerbi/-/tag/perfil-euskera>

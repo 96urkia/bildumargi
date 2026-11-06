@@ -94,10 +94,12 @@ def main():
                                                  log_config=None, access_log=False))
     hilo = threading.Thread(target=servidor_web.run, daemon=True, name="servidor")
     hilo.start()
-    for _ in range(200):                                       # hasta 20 segundos
-        if servidor_web.started:
+    for _ in range(900):                                       # hasta 90 segundos: un antivirus
+        if servidor_web.started or not hilo.is_alive():        # puede retrasar mucho el primer arranque
             break
         time.sleep(0.1)
+    if not servidor_web.started:
+        print("El servidor no ha arrancado: se abre igualmente, por si llega a tiempo.")
     print(f"Bildumargi {config.VERSION} en {url} · datos en {datos}")
     with open(fichero, "w", encoding="utf-8") as f:
         json.dump({"url": url, "pid": os.getpid()}, f)

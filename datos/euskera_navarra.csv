@@ -1,0 +1,273 @@
+municipio,nombre,vascohablante,receptor,no_vascohablante
+31001,Abáigar,12.7,17.7,69.6
+31002,Abárzuza / Abartzuza,19.9,19.5,60.6
+31003,Abaurregaina / Abaurrea Alta,45.8,30.0,24.2
+31004,Abaurrepea / Abaurrea Baja,19.4,16.1,64.5
+31005,Aberin,10.8,17.7,71.5
+31006,Ablitas,1.1,16.2,82.7
+31007,Adiós,14.9,11.8,73.3
+31008,Aguilar de Codés,11.8,10.5,77.6
+31009,Aibar / Oibar,12.0,18.4,69.6
+31010,Altsasu / Alsasua,37.8,18.9,43.3
+31011,Allín / Allin,21.4,13.1,65.5
+31012,Allo,8.8,15.1,76.0
+31013,Améscoa Baja,18.1,22.9,59.0
+31014,Ancín / Antzin,12.9,22.7,64.4
+31015,Andosilla,2.3,9.7,87.9
+31016,Ansoáin / Antsoain,19.7,16.0,64.3
+31017,Anue,34.9,17.6,47.5
+31018,Añorbe,6.5,16.9,76.5
+31019,Aoiz / Agoitz,26.2,12.1,61.7
+31020,Araitz,90.5,2.8,6.7
+31021,Aranarache / Aranaratxe,31.9,19.4,48.6
+31022,Arantza,91.8,4.0,4.2
+31023,Aranguren,12.8,11.8,75.4
+31024,Arano,88.2,6.4,5.5
+31025,Arakil,34.7,21.6,43.7
+31026,Aras,4.5,10.8,84.7
+31027,Arbizu,78.6,8.8,12.6
+31028,Arce / Artzi,26.4,13.4,60.3
+31029,Los Arcos,4.9,13.0,82.1
+31030,Arellano,19.9,23.1,57.1
+31031,Areso,87.6,6.0,6.4
+31032,Arguedas,0.9,1.7,97.4
+31033,Aria,43.5,34.8,21.7
+31034,Aribe,25.0,22.2,52.8
+31035,Armañanzas,5.9,11.8,82.4
+31036,Arróniz,8.2,17.3,74.4
+31037,Arruazu,70.9,17.5,11.7
+31038,Artajona,3.7,20.2,76.1
+31039,Artazu,22.2,16.2,61.5
+31040,Atetz,39.9,22.5,37.6
+31041,Ayegui / Aiegi,15.1,16.1,68.7
+31042,Azagra,0.3,1.1,98.6
+31043,Azuelo,0.0,3.7,96.3
+31044,Bakaiku,59.3,24.8,16.0
+31045,Barásoain,9.4,23.4,67.2
+31046,Barbarin,4.2,12.5,83.3
+31047,Bargota,11.3,18.4,70.3
+31048,Barillas,1.2,7.2,91.6
+31049,Basaburua,70.8,9.3,20.0
+31050,Baztan,73.7,11.2,15.1
+31051,Beire,3.9,19.9,76.1
+31052,Belascoáin,5.0,24.0,71.1
+31053,Berbinzana,3.0,24.1,72.9
+31054,Bertizarana,75.5,10.8,13.7
+31055,Betelu,83.6,3.8,12.6
+31056,Biurrun-Olcoz,11.2,15.1,73.7
+31057,Buñuel,0.6,0.8,98.6
+31058,Auritz / Burguete,46.6,19.0,34.5
+31059,Burgui / Burgi,26.6,12.0,61.5
+31060,Burlada / Burlata,15.1,14.1,70.8
+31061,El Busto,3.7,18.5,77.8
+31062,Cabanillas,0.4,3.7,95.8
+31063,Cabredo,18.1,9.6,72.3
+31064,Cadreita,2.2,1.4,96.4
+31065,Caparroso,1.7,13.9,84.4
+31066,Cárcar,1.7,11.7,86.6
+31067,Carcastillo,1.9,14.4,83.7
+31068,Cascante,1.0,9.5,89.5
+31069,Cáseda,8.4,16.5,75.2
+31070,Castejón,0.9,5.3,93.8
+31071,Castillonuevo / Gazteluberri,0.0,0.0,100.0
+31072,Cintruénigo,0.9,5.3,93.8
+31073,Ziordia,41.7,23.8,34.5
+31074,Cirauqui / Zirauki,28.6,13.0,58.4
+31075,Ciriza / Ziritza,14.1,8.6,77.3
+31076,Cizur,10.4,8.4,81.2
+31077,Corella,0.5,1.5,98.1
+31078,Cortes,1.3,12.2,86.5
+31079,Desojo,10.0,0.0,90.0
+31080,Dicastillo,9.5,22.9,67.6
+31081,Donamaria,85.0,7.1,7.9
+31082,Etxalar,78.9,7.2,13.9
+31083,Echarri / Etxarri,36.1,19.4,44.4
+31084,Etxarri Aranatz,72.5,14.6,12.9
+31085,Etxauri,33.3,15.2,51.4
+31086,Valle de Egüés / Eguesibar,16.3,12.2,71.4
+31087,Elgorriaga,77.5,13.1,9.4
+31088,Valle de Elorz / Elortzibar,9.4,18.8,71.8
+31089,Enériz / Eneritz,9.5,15.0,75.5
+31090,Eratsun,86.8,6.6,6.6
+31091,Ergoiena,84.1,5.2,10.7
+31092,Erro,44.0,16.1,39.8
+31093,Ezcároz / Ezkaroze,17.1,22.1,60.9
+31094,Eslava,1.0,18.2,80.8
+31095,Esparza de Salazar / Espartza Zaraitzu,23.4,20.8,55.8
+31096,Espronceda,4.9,13.7,81.4
+31097,Estella-Lizarra,13.3,13.0,73.7
+31098,Esteribar,29.6,13.0,57.4
+31099,Etayo,7.6,6.1,86.4
+31100,Eulate,18.4,22.8,58.8
+31101,Ezcabarte,20.8,15.3,63.9
+31102,Ezkurra,87.8,6.5,5.8
+31103,Ezprogui,6.4,10.6,83.0
+31104,Falces,2.5,15.6,81.9
+31105,Fitero,4.3,0.7,95.0
+31106,Fontellas,2.3,5.1,92.6
+31107,Funes,0.6,1.2,98.2
+31108,Fustiñana,0.5,1.8,97.7
+31109,Galar,15.9,11.0,73.1
+31110,Gallipienzo / Galipentzu,1.9,21.2,76.9
+31111,Gallués / Galoze,19.1,17.0,63.8
+31112,Garaioa,28.6,9.9,61.5
+31113,Garde,14.2,9.7,76.1
+31114,Garínoain,12.1,22.5,65.3
+31115,Garralda,43.2,26.5,30.3
+31116,Genevilla,6.3,15.6,78.1
+31117,Goizueta,87.2,5.9,6.9
+31118,Val de Goñi / Goñerri,12.1,24.2,63.6
+31119,Güesa / Gorza,0.0,22.2,77.8
+31120,Guesálaz / Gesalatz,13.9,14.8,71.2
+31121,Guirguillano,20.8,18.1,61.1
+31122,Huarte / Uharte,23.8,14.2,62.0
+31123,Uharte Arakil,43.1,21.3,35.6
+31124,Ibargoiti,14.7,16.8,68.4
+31125,Igúzquiza,20.5,16.6,63.0
+31126,Imotz,65.0,13.6,21.4
+31127,Irañeta,45.7,25.0,29.3
+31128,Isaba / Izaba,26.2,13.1,60.6
+31129,Ituren,87.2,6.9,5.9
+31130,Iturmendi,46.0,22.1,31.9
+31131,Iza / Itza,19.2,11.7,69.1
+31132,Izagaondoa,16.4,15.2,68.5
+31133,Izalzu / Itzaltzu,35.1,16.2,48.6
+31134,Jaurrieta,19.7,20.2,60.1
+31135,Javier,2.4,5.7,91.9
+31136,Juslapeña / Txulapain,28.7,10.5,60.8
+31137,Beintza-Labaien,84.2,7.2,8.6
+31138,Lakuntza,66.0,13.3,20.7
+31139,Lana,14.4,13.1,72.5
+31140,Lantz,51.0,22.1,26.8
+31141,Lapoblación,4.8,11.2,84.0
+31142,Larraga,2.9,17.8,79.3
+31143,Larraona,15.8,20.8,63.4
+31144,Larraun,82.8,5.5,11.8
+31145,Lazagurría,2.2,13.1,84.7
+31146,Leache / Leatxe,5.6,13.9,80.6
+31147,Legarda,14.8,17.8,67.4
+31148,Legaria,8.3,9.2,82.6
+31149,Leitza,81.2,5.9,12.9
+31150,Leoz / Leotz,27.5,15.1,57.3
+31151,Lerga,8.3,16.7,75.0
+31152,Lerín,2.7,17.1,80.2
+31153,Lesaka,78.1,10.3,11.6
+31154,Lezaun,26.6,24.9,48.5
+31155,Liédena,5.1,11.5,83.3
+31156,Lizoain-Arriasgoiti / Lizoainibar-Arriasgoiti,26.9,19.3,53.8
+31157,Lodosa,3.4,5.4,91.1
+31158,Lónguida / Longida,25.7,11.9,62.5
+31159,Lumbier,18.7,14.1,67.2
+31160,Luquin,16.3,16.3,67.4
+31161,Mañeru,18.4,12.8,68.8
+31162,Marañón,2.0,14.0,84.0
+31163,Marcilla,1.4,11.7,86.9
+31164,Mélida,1.7,12.9,85.5
+31165,Mendavia,1.6,10.2,88.2
+31166,Mendaza,9.7,17.1,73.2
+31167,Mendigorria,7.0,20.9,72.1
+31168,Metauten,19.1,14.5,66.4
+31169,Milagro,0.4,2.2,97.5
+31170,Mirafuentes,40.4,17.5,42.1
+31171,Miranda de Arga,4.3,19.4,76.4
+31172,Monreal / Elo,9.0,20.9,70.0
+31173,Monteagudo,0.2,1.3,98.5
+31174,Morentin,14.3,20.5,65.2
+31175,Mues,8.0,13.8,78.2
+31176,Murchante,0.8,5.5,93.7
+31177,Murieta,13.2,12.1,74.7
+31178,Murillo el Cuende,2.6,15.0,82.3
+31179,Murillo el Fruto,2.3,5.5,92.2
+31180,Muruzábal,9.9,13.7,76.3
+31181,Navascués / Nabaskoze,14.5,17.7,67.7
+31182,Nazar,20.5,17.9,61.5
+31183,Obanos,10.8,21.2,68.0
+31184,Oco,16.2,24.3,59.5
+31185,Ochagavía / Otsagabia,27.3,18.8,53.9
+31186,Odieta,38.6,17.8,43.6
+31187,Oiz,83.3,4.8,11.9
+31188,Oláibar,14.0,14.0,71.9
+31189,Olazti / Olazagutía,36.0,19.4,44.6
+31190,Olejua,19.6,7.8,72.5
+31191,Olite / Erriberri,5.7,17.2,77.1
+31192,Olóriz / Oloritz,12.8,18.5,68.7
+31193,Cendea de Olza / Oltza Zendea,23.4,14.2,62.4
+31194,Valle de Ollo / Ollaran,39.2,15.4,45.4
+31195,Orbaizeta,52.1,18.1,29.8
+31196,Orbara,33.3,39.4,27.3
+31197,Orísoain,4.2,27.8,68.1
+31198,Oronz / Orontze,44.9,18.4,36.7
+31199,Oroz-Betelu / Orotz-Betelu,15.8,12.2,71.9
+31200,Oteiza,11.6,25.6,62.8
+31201,Pamplona / Iruña,11.8,11.4,76.7
+31202,Peralta / Azkoien,1.1,7.6,91.3
+31203,Petilla de Aragón,6.5,0.0,93.5
+31204,Piedramillera,10.0,10.0,80.0
+31205,Pitillas,3.1,15.7,81.2
+31206,Puente la Reina / Gares,17.4,10.4,72.2
+31207,Pueyo / Puiu,18.4,16.9,64.7
+31208,Ribaforada,0.5,6.7,92.8
+31209,Romanzado / Erromantzatua,20.3,17.0,62.6
+31210,Roncal / Erronkari,18.6,14.5,66.8
+31211,Orreaga / Roncesvalles,5.0,10.0,85.0
+31212,Sada,5.6,9.9,84.5
+31213,Saldias,87.8,7.8,4.3
+31214,Salinas de Oro / Jaitz,28.3,12.3,59.4
+31215,San Adrián,0.5,7.2,92.3
+31216,Sangüesa / Zangoza,9.7,17.9,72.4
+31217,San Martín de Unx,5.2,7.3,87.5
+31219,Sansol,4.7,11.3,84.0
+31220,Santacara,2.2,19.8,78.0
+31221,Doneztebe / Santesteban,64.9,10.9,24.2
+31222,Sarriés / Sartze,15.8,14.0,70.2
+31223,Sartaguda,5.2,12.7,82.1
+31224,Sesma,2.0,12.3,85.8
+31225,Sorlada,6.1,12.2,81.6
+31226,Sunbilla,80.6,7.6,11.8
+31227,Tafalla,9.9,17.4,72.7
+31228,Tiebas-Muruarte de Reta,9.2,14.7,76.1
+31229,Tirapu,7.3,16.4,76.4
+31230,Torralba del Río,8.4,13.1,78.5
+31231,Torres del Río,2.5,10.1,87.4
+31232,Tudela,1.6,3.6,94.8
+31233,Tulebras,2.6,5.3,92.1
+31234,Úcar,7.0,12.3,80.7
+31235,Ujué / Uxue,8.5,25.6,65.9
+31236,Ultzama,55.4,15.7,29.0
+31237,Unciti,8.3,17.5,74.1
+31238,Unzué / Untzue,11.8,25.0,63.2
+31239,Urdazubi / Urdax,76.1,7.2,16.7
+31240,Urdiain,78.1,10.2,11.8
+31241,Urraúl Alto,9.4,12.9,77.7
+31242,Urraúl Bajo,15.3,14.7,70.0
+31243,Urroz Villa / Urrotz,13.9,23.2,63.0
+31244,Urroz,95.9,1.7,2.3
+31245,Urzainqui / Urzainki,23.8,14.3,61.9
+31246,Uterga,10.4,14.7,74.8
+31247,Uztárroz / Uztarroze,18.1,20.8,61.1
+31248,Luzaide / Valcarlos,55.6,13.0,31.4
+31249,Valtierra,0.5,3.4,96.2
+31250,Bera,66.9,13.1,20.1
+31251,Viana,6.8,10.4,82.8
+31252,Vidángoz / Bidankoze,28.2,14.1,57.7
+31253,Bidaurreta,46.4,13.1,40.5
+31254,Villafranca,1.4,9.0,89.6
+31255,Villamayor de Monjardín,14.2,9.2,76.7
+31256,Hiriberri / Villanueva de Aezkoa,56.9,13.7,29.4
+31257,Villatuerta,13.8,23.7,62.6
+31258,Villava / Atarrabia,21.9,14.6,63.6
+31259,Igantzi,85.3,6.0,8.7
+31260,Valle de Yerri / Deierri,17.8,16.4,65.9
+31261,Yesa,6.7,13.3,80.0
+31262,Zabalza / Zabaltza,25.8,14.0,60.2
+31263,Zubieta,88.8,4.4,6.8
+31264,Zugarramurdi,76.6,8.2,15.2
+31265,Zúñiga,17.3,16.0,66.7
+31901,Barañáin / Barañain,12.1,11.9,76.0
+31902,Berrioplano / Berriobeiti,17.6,14.2,68.2
+31903,Berriozar,15.2,14.6,70.2
+31904,Irurtzun,32.1,18.0,49.9
+31905,Beriáin,4.9,16.9,78.2
+31906,Orkoien,15.5,16.6,67.9
+31907,Zizur Mayor / Zizur Nagusia,16.9,16.1,67.0
+31908,Lekunberri,64.0,12.0,24.0

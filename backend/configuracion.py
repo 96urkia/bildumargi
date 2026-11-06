@@ -20,7 +20,7 @@ import json
 import os
 import threading
 
-PESTANAS = ("diagnostico", "secciones", "series", "compras", "seguimiento")
+PESTANAS = ("diagnostico", "secciones", "pautas", "poblacion", "compras", "series", "seguimiento")
 IDIOMAS = ("es", "eu", "ca", "gl", "en")
 TEMAS = ("oscuro", "claro")
 PALETAS = ("okabe", "viridis", "azules")
@@ -30,6 +30,9 @@ POR_DEFECTO = {
         "nombre": "",
         "red": None,                # red a la que pertenece (None = NOMBRE_RED de config.py)
         "poblacion": None,          # habitantes atendidos
+        "poblacion_origen": None,   # "ine": la pone el Padrón y se actualiza; "manual": la escribió alguien
+        "codigo_postal": None,      # para buscar sus municipios en el INE
+        "municipios": [],           # códigos INE de los municipios atendidos
         "metros": None,             # superficie útil
         "sucursal": None,           # código «Suc.» de los listados (lo pone Bildumargi)
         "carpeta": None,            # carpeta de su historial en datos/bibliotecas/
@@ -102,12 +105,20 @@ def _validar_biblioteca(entrada, actual=None):
     if "red" in entrada:
         b["red"] = " ".join(str(entrada.get("red") or "").split())[:120]
     if "poblacion" in entrada:
-        b["poblacion"] = _entero(entrada.get("poblacion"), 0, 50_000_000)
+        # Con municipios del INE, los habitantes son los del Padrón: la pantalla
+        # de configuración no los cambia (para escribirlos a mano, antes hay
+        # que dejar de usar el INE).
+        if not (actual and b["municipios"]):
+            antes = b["poblacion"]
+            b["poblacion"] = _entero(entrada.get("poblacion"), 0, 50_000_000)
+            if b["poblacion"] != antes:
+                b["poblacion_origen"] = "manual"
     if "metros" in entrada:
         metros = _entero(entrada.get("metros"), 0, 1_000_000)
         b["metros"] = metros or None
-    # Sucursal y carpeta las pone Bildumargi, no la pantalla de configuración
-    for campo in ("sucursal", "carpeta"):
+    # Sucursal, carpeta y datos del INE los pone Bildumargi, no la pantalla de
+    # configuración (que los devuelve tal cual los recibió)
+    for campo in ("sucursal", "carpeta", "codigo_postal", "municipios", "poblacion_origen"):
         if campo in entrada and actual is None:
             b[campo] = entrada[campo]
     return b

@@ -113,6 +113,14 @@ function parametros(objeto) {
 
 const API = {
   config: () => pedir("/api/config"),
+  ineCodigoPostal: (cp) => pedir(`/api/ine/cp/${encodeURIComponent(cp)}`),
+  inePoblacion: (actualizar = false) => pedir(`/api/ine/poblacion${actualizar ? "?actualizar=true" : ""}`),
+  ineQuitar: (token) => pedir("/api/ine/biblioteca", { method: "DELETE", headers: { "X-Admin": token || "" } }),
+  pautas: (sesion) => pedir(`/api/sesion/${sesion}/pautas`),
+  ineCotejo: (sesion) => pedir(`/api/sesion/${sesion}/poblacion/cotejo`),
+  ineGuardar: (token, codigoPostal, municipios) => pedir("/api/ine/biblioteca",
+    { method: "POST", headers: { "Content-Type": "application/json", "X-Admin": token || "" },
+      body: JSON.stringify({ codigo_postal: codigoPostal, municipios }) }),
   analizar: (formData) => pedir("/api/analizar", { method: "POST", body: formData }),
   idiomas: (s, q) => pedir(`/api/sesion/${s}/idiomas${parametros(q)}`),
   buscar: (s, q) => pedir(`/api/sesion/${s}/buscar${parametros(q)}`),

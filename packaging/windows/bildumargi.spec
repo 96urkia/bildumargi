@@ -16,6 +16,8 @@ RAIZ = os.path.abspath(os.path.join(SPECPATH, "..", ".."))
 datos = [
     (os.path.join(RAIZ, "frontend"), "frontend"),
     (os.path.join(RAIZ, "datos", "pautas.json"), "datos"),
+    (os.path.join(RAIZ, "datos", "codigos_postales.csv"), "datos"),
+    (os.path.join(RAIZ, "datos", "euskera_navarra.csv"), "datos"),
     (os.path.join(RAIZ, "LICENSE"), "."),
     (os.path.join(RAIZ, "AVISO-LICENCIA.md"), "."),
     (os.path.join(RAIZ, "VERSION.txt"), "."),

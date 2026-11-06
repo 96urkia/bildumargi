@@ -1,11 +1,30 @@
 Bildumargi
-Versión: 2.1.1
+Versión: 2.2
 Licencia: AGPLv3
 
 Versión para bibliotecas individuales: se instala en Windows con un
 instalador (acceso directo y ventana propia), con iniciar.bat / iniciar.sh, o
 en un servidor Linux con el paquete .deb. Manual:
 https://96urkia.github.io/bildumargi/
+
+Cambios de la versión 2.2
+-------------------------
+- Nueva pestaña Población: con el código postal, Bildumargi descarga del INE
+  los habitantes (cifras oficiales del Padrón) y la demografía del municipio
+  (Censo anual): pirámide de edad, edad media y población extranjera por
+  nacionalidad y país de nacimiento. Si el código abarca varios municipios, se
+  eligen los que atiende la biblioteca y se suman.
+- Los habitantes del análisis son los del Padrón y se actualizan solos. Para
+  escribirlos a mano hay que dejar de usar el INE (Configuración).
+- Nuevo menú: Análisis de la colección (Diagnóstico, Secciones, Pautas,
+  Población), Sugerencias de compra (Autores más prestados, Series, Novedades)
+  y Seguimiento.
+- Cotejo con el fondo: vecinos, fondo y documentos prestados por edad (adultos
+  desde los 18 años), y peso de cada lengua en el fondo frente a la población.
+- Nueva pestaña Pautas: la colección frente a IFLA/UNESCO (2001), Ministerio de
+  Cultura-CCAA (2010) y Diputació de Barcelona (2012).
+- Sin conexión con el INE se sigue trabajando con la última copia descargada.
+- Windows: más margen de espera en el arranque (un antivirus puede retrasarlo).
 
 Cambios de la versión 2.1.1
 ---------------------------
