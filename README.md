@@ -278,6 +278,13 @@ instalador también se puede construir a mano en Windows con
 
 El manual se publica solo (`.github/workflows/manual.yml`) al cambiar `docs/`.
 
+### Microsoft Store
+
+El flujo «Paquete para Microsoft Store» crea el `.msix` (lo deja en los artefactos
+de la ejecución) y se sube a mano a Partner Center. Microsoft lo firma al
+certificarlo. La identidad de `packaging/windows/msix/AppxManifest.xml` sale de
+Partner Center y no se cambia.
+
 ---
 
 ## Esquemas de clasificación de terceros

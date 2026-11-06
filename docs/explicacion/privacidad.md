@@ -11,6 +11,9 @@ no. **No contienen datos de lectores.**
 Todo se queda en el ordenador (o en el servidor) donde está instalado
 Bildumargi. Solo se conecta fuera para:
 
+- **El INE**, si indicas un código postal: se piden las cifras públicas de ese
+  municipio. No se envía nada del fondo. El código postal se traduce a municipio
+  en tu propio equipo.
 - **DILVE**, si se activa: se envían ISBN para recibir sus fichas.
 - **Las portadas** de los libros, que se piden a las direcciones que da DILVE.
 - **Los enlaces** que tú pulsas (Todos tus libros, el buscador de Thema), que

@@ -8,6 +8,7 @@
 # Lo usa packaging/windows/construir.ps1, que después crea el instalador.
 # config_local.py NO entra: las claves de cada ordenador no se reparten.
 import os
+import re
 
 from PyInstaller.utils.hooks import collect_submodules
 
@@ -33,6 +34,17 @@ analisis = Analysis(
     excludes=["tkinter", "matplotlib", "numpy", "pandas", "pytest", "IPython"],
     noarchive=False,
 )
+# Los datos de versión del .exe salen de config.py, para que nunca se queden atrás.
+with open(os.path.join(RAIZ, "config.py"), encoding="utf-8") as f:
+    VERSION = re.search(r'^VERSION = "(.+)"', f.read(), re.M).group(1)
+numeros = (VERSION.split(".") + ["0"] * 4)[:4]
+with open(os.path.join(SPECPATH, "version.txt"), encoding="utf-8") as f:
+    datos_version = f.read().replace("@NUMEROS@", ", ".join(numeros)).replace("@VERSION@", VERSION)
+os.makedirs(workpath, exist_ok=True)
+fichero_version = os.path.join(workpath, "version-exe.txt")
+with open(fichero_version, "w", encoding="utf-8") as f:
+    f.write(datos_version)
+
 pyz = PYZ(analisis.pure)
 exe = EXE(
     pyz,
@@ -42,6 +54,6 @@ exe = EXE(
     name="Bildumargi",
     icon=os.path.join(SPECPATH, "bildumargi.ico"),
     console=False,          # aplicación de ventana, sin consola negra
-    version=os.path.join(SPECPATH, "version.txt"),
+    version=fichero_version,
 )
 coleccion = COLLECT(exe, analisis.binaries, analisis.datas, name="Bildumargi")

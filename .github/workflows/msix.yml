@@ -1,0 +1,31 @@
+# Crea el paquete de Microsoft Store. No publica nada: el .msix queda en los
+# artefactos de la ejecución, y se sube a mano a Partner Center.
+name: Paquete para Microsoft Store
+
+on:
+  push:
+    branches: [poblacion-y-pautas]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  msix:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Librerías
+        run: python -m pip install -r requirements.txt -r packaging/windows/requisitos.txt
+      - name: Aplicación
+        run: |
+          python packaging/windows/crear_icono.py
+          python -m PyInstaller packaging/windows/bildumargi.spec --noconfirm --log-level WARN --distpath build/windows/dist --workpath build/windows/trabajo
+      - name: Paquete MSIX
+        run: python packaging/windows/construir_msix.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msix
+          path: build/windows/Bildumargi-*.msix
+          if-no-files-found: error
