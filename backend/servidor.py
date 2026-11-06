@@ -1783,7 +1783,7 @@ def api_ine_poblacion(actualizar: bool = False):
 
 @app.get("/api/sesion/{token}/pautas")
 def api_pautas(token: str):
-    """La colección frente a las pautas oficiales (IFLA, Ministerio, Diputació)."""
+    """La colección frente a las pautas oficiales (Ministerio, Diputació)."""
     sesion = obtener_sesion(token)
     resultado = mod_pautas.comparar(sesion.registros, sesion.poblacion)
     # El euskera no es una pauta, pero es la referencia local de cuánto debería pesar:

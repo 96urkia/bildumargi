@@ -16,7 +16,7 @@ pestañas:
    relativo, año medio y porcentaje de los últimos cinco años, más los años de
    edición.
 3. **La colección frente a las pautas**: el tamaño del fondo y su composición
-   frente a IFLA, el Ministerio y la Diputació de Barcelona, y cuánto se separa
+   frente al Ministerio y la Diputació de Barcelona, y cuánto se separa
    cada sección de cada pauta.
 4. **Población**, si has indicado el código postal: habitantes y su evolución,
    pirámide, procedencias, y el cotejo del fondo con la edad y las lenguas de

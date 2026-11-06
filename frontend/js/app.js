@@ -3764,9 +3764,7 @@ function tarjetasPautas(d) {
       contexto: t("pautas_tarjeta_ctx", { r: referencia, f: t(`pautas_fuente_${fuente}`) }),
     }));
   };
-  tarjeta(filaPauta(d, "ifla", "libros_hab"), "ifla", 2);
   tarjeta(filaPauta(d, "ministerio", "docs_hab"), "ministerio", 2);
-  tarjeta(filaPauta(d, "ifla", "fondo_minimo"), "ifla", 0);
   tarjeta(filaPauta(d, "ministerio", "coleccion_inicial"), "ministerio", 0);
   if (d.euskera) {
     // Peso del euskera en el fondo frente a quienes lo conocen en el municipio (Nastat)
@@ -3789,7 +3787,6 @@ function tarjetasPautas(d) {
 // La barra de la pauta encima de la tuya, con los mismos colores (pantalla e informe)
 function composicionPautas(d, destino, rotuloFondo = "pautas_barra_tu") {
   const comparaciones = [
-    ["ifla", ["ninos", "ficcion_adultos", "no_ficcion_adultos"]],
     ["ministerio", ["adultos", "infantil_juvenil", "audiovisuales"]],
     ["diputacio", ["general", "infantil"]],
     ["diputacio", ["libros", "cd", "dvd"]],
@@ -3799,9 +3796,7 @@ function composicionPautas(d, destino, rotuloFondo = "pautas_barra_tu") {
     const filas = claves.map((c) => filaPauta(d, fuente, c));
     const grupo = crear("div", "pautas-comparacion");
     const cabeza = crear("div", "pautas-comparacion-cabeza");
-    const rotuloFuente = crear("span", "pautas-fuente", t(`pautas_fuente_${fuente}`));
-    if (fuente === "ifla") rotuloFuente.title = t("pautas_ifla_similares");
-    cabeza.appendChild(rotuloFuente);
+    cabeza.appendChild(crear("span", "pautas-fuente", t(`pautas_fuente_${fuente}`)));
     filas.forEach((f, i) => {
       const pieza = crear("span", "pautas-leyenda", t(`pauta_${f.clave}`));
       const muestra = crear("i");
@@ -3816,11 +3811,10 @@ function composicionPautas(d, destino, rotuloFondo = "pautas_barra_tu") {
       const barra = crear("div", "pautas-apilada");
       filas.forEach((f, i) => {
         const v = f[campo] || 0;
-        const similar = campo === "min" && fuente === "ifla";    // la IFLA no da cifra: «porcentajes similares»
-        const tramo = crear("div", "pautas-tramo", similar ? "≈ ⅓" : v >= 7 ? `${decimal(v, 0)} %` : "");
+        const tramo = crear("div", "pautas-tramo", v >= 7 ? `${decimal(v, 0)} %` : "");
         tramo.style.width = `${v}%`;
         tramo.style.background = colorSerie(i);
-        tramo.title = similar ? t("pautas_ifla_similares") : `${t(`pauta_${f.clave}`)}: ${decimal(v, Number.isInteger(v) ? 0 : 1)} %`;
+        tramo.title = `${t(`pauta_${f.clave}`)}: ${decimal(v, Number.isInteger(v) ? 0 : 1)} %`;
         barra.appendChild(tramo);
       });
       linea.appendChild(barra);
@@ -4612,7 +4606,7 @@ function hojaPautas(d) {
   const hoja = nuevaHoja(t("informe_pautas"), t("informe_pautas_sub"));
   const cuerpo = hoja.querySelector(".cuerpo-hoja");
   const tarjetas = tarjetasPautas(d);
-  tarjetas.className = `kpis-informe${tarjetas.children.length === 5 ? "" : " cuatro"}`;
+  tarjetas.className = `kpis-informe${tarjetas.children.length === 3 ? " tres" : " dos"}`;
   cuerpo.appendChild(tarjetas);
 
   const composicion = bloqueInforme(t("informe_pautas_comp"), t("pautas_composicion_sub"));
@@ -4703,7 +4697,6 @@ function notasInforme(a, { pautas, demografia, cotejo, sinINE } = {}) {
   [t("nota_uso"), t("nota_prestamo"), t("nota_edicion"),
    pauta ? t("nota_pauta", { f: pauta.fuente }) : null,
    pautas ? t("pautas_ayuda_fuentes") : null,
-   pautas ? t("pautas_ifla_similares") : null,
    pautas ? t("pautas_ayuda_lectura") : null,
    pautas ? t("pautas_ayuda_no_calculable") : null,
    demografia ? t("ine_nota_fuentes", { p: miles(padron.total), pa: padron.anio, c: miles(censo.total), ca: censo.anio }) : null,

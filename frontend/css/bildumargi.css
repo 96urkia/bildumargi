@@ -1417,7 +1417,8 @@ body.con-informe { overflow: hidden; }
 .tabla-informe tr.pequena td { color: #5C626D; }
 .tabla-informe td.encima { color: var(--uso-encima-texto, #9A6700); font-weight: 600; }
 .tabla-informe td.debajo { color: var(--uso-debajo-texto, #1B63A6); }
-.kpis-informe.cuatro { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.kpis-informe.tres { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.kpis-informe.dos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .informe .pautas-comparacion { flex: none; gap: .4mm; margin-top: 1.6mm; }
 .informe .pautas-comparacion-cabeza { font-size: 7pt; }
 .informe .pautas-barra-fila { flex: none; height: 4mm; min-height: 0; grid-template-columns: 15mm minmax(0, 1fr); }
@@ -2102,9 +2103,9 @@ table.ine-tabla tr.ine-total td { font-weight: 600; border-top: 1px solid rgba(1
 .ine-lenguas svg { display: block; width: 100%; }
 .rendimiento .separador-lenguas { stroke: var(--borde); stroke-width: 1; }
 .panel-pautas { flex: 1; min-height: 0; height: 100%; display: flex; flex-direction: column; gap: .45rem; overflow: hidden; }
-.pautas-tarjetas { flex: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .45rem; }
-.pautas-tarjetas.con-euskera { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-@media (max-width: 1400px) { .pautas-tarjetas.con-euskera .rotulo { font-size: .58rem; letter-spacing: .02em; } .pautas-tarjetas .cabeza-indicador { align-items: flex-start; } }
+.pautas-tarjetas { flex: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem; }
+.pautas-tarjetas.con-euskera { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1400px) { .pautas-tarjetas .cabeza-indicador { align-items: flex-start; } }
 .pautas-tarjetas .indicador { padding: .45rem .7rem; min-width: 0; }
 .pautas-tarjetas .rotulo { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.15; }
 .pautas-tarjetas .cifra { font-size: 1.35rem; line-height: 1.15; }

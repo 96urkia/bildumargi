@@ -21,8 +21,8 @@ Cambios de la versión 2.2
   y Seguimiento.
 - Cotejo con el fondo: vecinos, fondo y documentos prestados por edad (adultos
   desde los 18 años), y peso de cada lengua en el fondo frente a la población.
-- Nueva pestaña Pautas: la colección frente a IFLA/UNESCO (2001), Ministerio de
-  Cultura-CCAA (2010) y Diputació de Barcelona (2012).
+- Nueva pestaña Pautas: la colección frente a Ministerio de Cultura-CCAA (2010)
+  y Diputació de Barcelona (2012).
 - Sin conexión con el INE se sigue trabajando con la última copia descargada.
 - Windows: más margen de espera en el arranque (un antivirus puede retrasarlo).
 

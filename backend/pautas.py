@@ -3,9 +3,6 @@
 
 Las cifras se han copiado de los documentos, sin interpretar:
 
-  IFLA      Directrices IFLA/UNESCO para el desarrollo del servicio de bibliotecas
-            públicas, abril de 2001, ap. 4.6. Da cifras para el tamaño; para la
-            composición solo dice «porcentajes similares» en los fondos reducidos.
   MINISTERIO  Ministerio de Cultura-CCAA, Consejo de Cooperación Bibliotecaria,
             Pautas para establecer una política de colecciones en una biblioteca
             pública, enero de 2010, pp. 23-27. Son valores para dimensionar una
@@ -42,8 +39,6 @@ TRAMOS_MINISTERIO = (
     (100_000, 1.5, 45_000, 80_000),
     (None, 1.5, 80_000, 95_000),
 )
-IFLA_LIBROS_MIN, IFLA_LIBROS_MAX, IFLA_FONDO_MINIMO = 1.5, 2.5, 2_500
-TERCIO = 33.3
 
 # clave: (% Ministerio sobre el fondo, % Diputació sobre los libros)
 SECCIONES = (
@@ -134,26 +129,10 @@ def comparar(registros, habitantes):
     ficcion += poesia_teatro
     no_ficcion = sum(cuenta.get(g, 0) for g in _NO_FICCION) + cuenta.get("8", 0) - poesia_teatro
 
-    # IFLA, ap. 4.6: «En los fondos más reducidos, el material para los niños y las
-    # obras de ficción y de no ficción para adultos deben estar en porcentajes
-    # similares». No da cifras: el tercio de cada uno es la lectura de esa frase.
-    ninos = sum(cuenta.get(g, 0) for g in ("i_con", "i_fic", "i_com"))
-    ficcion_adultos = sum(cuenta.get(g, 0) for g in ("novela", "comic", "jn")) + poesia_teatro
-    no_ficcion_adultos = sum(cuenta.get(g, 0) for g in _NO_FICCION if g != "i_con") + cuenta.get("8", 0) - poesia_teatro
-    base_ifla = ninos + ficcion_adultos + no_ficcion_adultos
-
     tramo = None
     if habitantes:
         tramo = next(t for t in TRAMOS_MINISTERIO if t[0] is None or habitantes <= t[0])
     bloques = [
-        {"fuente": "ifla", "filas": [
-            _fila("libros_hab", (IFLA_LIBROS_MIN, IFLA_LIBROS_MAX),
-                  round(libros / habitantes, 2) if habitantes else None, ""),
-            _fila("fondo_minimo", (IFLA_FONDO_MINIMO, None), libros, "n"),
-            _fila("ninos", TERCIO, _pct(ninos, base_ifla)),
-            _fila("ficcion_adultos", TERCIO, _pct(ficcion_adultos, base_ifla)),
-            _fila("no_ficcion_adultos", TERCIO, _pct(no_ficcion_adultos, base_ifla)),
-        ]},
         {"fuente": "ministerio", "tramo": tramo[0] if tramo else None, "filas": [
             *([_fila("docs_hab", tramo[1], round(total / habitantes, 2), ""),
                _fila("coleccion_inicial", (tramo[2], tramo[3]), total, "n")] if tramo else []),
